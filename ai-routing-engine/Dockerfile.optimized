@@ -1,0 +1,52 @@
+# Multi-stage optimized Dockerfile for ai-routing-engine
+# Stage 1: Build dependencies
+FROM python:3.11-slim as builder
+
+WORKDIR /build
+
+# Install build dependencies in one layer
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Stage 2: Runtime
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && useradd --create-home --shell /bin/bash --uid 1001 appuser
+
+# Copy Python packages from builder stage
+COPY --from=builder /root/.local /home/appuser/.local
+
+# Copy application code
+COPY main.py phase2_utils.py ./
+COPY shared/ ./shared/
+
+# Set ownership and permissions
+RUN chown -R appuser:appuser /app
+USER appuser
+
+# Update PATH for user-installed packages
+ENV PATH=/home/appuser/.local/bin:$PATH
+
+EXPOSE 8080
+
+# Optimized healthcheck based on service type
+HEALTHCHECK --interval=60s --timeout=30s --start-period=30s --retries=2 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Production-optimized startup
+CMD ["python", "-u", "main.py"]

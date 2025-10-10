@@ -1,0 +1,29 @@
+# Internal AI Service v2 Requirements
+# GPU-accelerated LLM inference with vLLM
+
+# Core dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+
+# GCP integration
+google-cloud-storage==2.10.0
+google-cloud-firestore==2.13.1
+google-cloud-bigquery==3.11.4
+
+# Logging
+structlog==23.1.0
+
+# LLM inference (commented out for initial deployment without GPU)
+# Uncomment when deploying to Cloud Run with GPU:
+# vllm==0.2.7
+# torch==2.1.0
+# transformers==4.35.0
+# accelerate==0.24.1
+
+# Performance monitoring
+prometheus-client==0.18.0
+
+# Async support
+aiofiles==23.2.1
+httpx==0.25.1

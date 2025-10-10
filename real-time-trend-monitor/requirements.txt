@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic
+google-cloud-pubsub
+google-cloud-firestore
+google-cloud-storage
+requests
+python-multipart
+redis
+aiohttp

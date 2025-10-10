@@ -1,0 +1,15 @@
+# Fact Checking Layer Requirements
+
+# Core dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+
+# GCP integration
+google-cloud-bigquery==3.11.4
+
+# Logging
+structlog==23.1.0
+
+# HTTP client for Perplexity API
+httpx==0.25.1

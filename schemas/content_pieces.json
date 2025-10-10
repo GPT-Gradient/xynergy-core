@@ -1,0 +1,21 @@
+[
+  {"name":"content_id","type":"STRING","mode":"REQUIRED"},
+  {"name":"content_type","type":"STRING"},
+  {"name":"keyword_primary","type":"STRING"},
+  {"name":"keyword_secondary","type":"STRING","mode":"REPEATED"},
+  {"name":"status","type":"STRING"},
+  {"name":"hub_id","type":"STRING"},
+  {"name":"title","type":"STRING"},
+  {"name":"meta_description","type":"STRING"},
+  {"name":"url","type":"STRING"},
+  {"name":"word_count","type":"INT64"},
+  {"name":"performance_score","type":"FLOAT64"},
+  {"name":"ranking_position","type":"INT64"},
+  {"name":"monthly_traffic","type":"INT64"},
+  {"name":"monthly_conversions","type":"INT64"},
+  {"name":"conversion_rate","type":"FLOAT64"},
+  {"name":"last_optimized","type":"DATE"},
+  {"name":"created_at","type":"TIMESTAMP"},
+  {"name":"published_at","type":"TIMESTAMP"},
+  {"name":"updated_at","type":"TIMESTAMP"}
+]

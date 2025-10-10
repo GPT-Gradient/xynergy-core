@@ -1,0 +1,13 @@
+
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+*.tfstate
+*.tfstate.*
+
+# Large binaries
+**/*.dylib
+**/*_x5
+

@@ -1,0 +1,15 @@
+[
+  {"name":"fact_id","type":"STRING","mode":"REQUIRED"},
+  {"name":"fact_text","type":"STRING","mode":"REQUIRED"},
+  {"name":"topic","type":"STRING"},
+  {"name":"source_url","type":"STRING"},
+  {"name":"verified_date","type":"DATE","mode":"REQUIRED"},
+  {"name":"verification_method","type":"STRING"},
+  {"name":"confidence_score","type":"FLOAT64"},
+  {"name":"used_count","type":"INT64"},
+  {"name":"cost_savings","type":"FLOAT64"},
+  {"name":"tenant_id","type":"STRING"},
+  {"name":"created_at","type":"TIMESTAMP"},
+  {"name":"last_used","type":"TIMESTAMP"},
+  {"name":"metadata","type":"JSON"}
+]

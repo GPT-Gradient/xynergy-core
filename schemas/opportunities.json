@@ -1,0 +1,13 @@
+[
+  {"name":"opportunity_id","type":"STRING","mode":"REQUIRED"},
+  {"name":"opportunity_type","type":"STRING"},
+  {"name":"keyword","type":"STRING"},
+  {"name":"confidence_score","type":"FLOAT64"},
+  {"name":"estimated_traffic","type":"INT64"},
+  {"name":"estimated_difficulty","type":"FLOAT64"},
+  {"name":"recommendation","type":"STRING"},
+  {"name":"detected_at","type":"TIMESTAMP"},
+  {"name":"status","type":"STRING"},
+  {"name":"content_id","type":"STRING"},
+  {"name":"created_at","type":"TIMESTAMP"}
+]

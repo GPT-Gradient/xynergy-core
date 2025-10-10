@@ -1,0 +1,11 @@
+[
+  {"name":"date","type":"DATE","mode":"REQUIRED"},
+  {"name":"service_name","type":"STRING"},
+  {"name":"api_name","type":"STRING"},
+  {"name":"request_count","type":"INT64"},
+  {"name":"cache_hits","type":"INT64"},
+  {"name":"cache_misses","type":"INT64"},
+  {"name":"cost_usd","type":"FLOAT64"},
+  {"name":"savings_usd","type":"FLOAT64"},
+  {"name":"created_at","type":"TIMESTAMP"}
+]

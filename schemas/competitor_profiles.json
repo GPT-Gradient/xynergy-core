@@ -1,0 +1,16 @@
+[
+  {"name":"domain","type":"STRING","mode":"REQUIRED"},
+  {"name":"tenant_id","type":"STRING"},
+  {"name":"industry","type":"STRING"},
+  {"name":"content_count","type":"INT64"},
+  {"name":"avg_content_length","type":"INT64"},
+  {"name":"update_frequency","type":"STRING"},
+  {"name":"social_presence","type":"JSON"},
+  {"name":"tech_stack","type":"STRING","mode":"REPEATED"},
+  {"name":"backlink_profile","type":"JSON"},
+  {"name":"authority_score","type":"FLOAT64"},
+  {"name":"last_scraped","type":"TIMESTAMP"},
+  {"name":"tracking_since","type":"DATE"},
+  {"name":"created_at","type":"TIMESTAMP"},
+  {"name":"updated_at","type":"TIMESTAMP"}
+]

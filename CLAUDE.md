@@ -18,7 +18,8 @@ The platform follows a consistent microservice pattern where each service is:
 ### Core Services
 - `platform-dashboard`: Central monitoring and control interface
 - `marketing-engine`: AI-powered marketing campaign generation
-- `ai-routing-engine`: Intelligent AI request routing (internal vs external APIs)
+- `ai-routing-engine`: Intelligent AI request routing (Abacus → OpenAI → internal)
+- `ai-providers`: External AI API integration (Abacus AI and OpenAI)
 - `ai-assistant`: Conversational AI interface
 - `content-hub`: Content management and storage
 - `analytics-data-layer`: Data processing and analytics
@@ -80,8 +81,10 @@ terraform apply
 - **Embedded UIs**: Many services include embedded HTML/JavaScript interfaces
 
 ### AI Integration
-- **Hybrid AI Routing**: The `ai-routing-engine` automatically routes requests to internal or external AI services based on cost/performance optimization
+- **Intelligent Routing**: The `ai-routing-engine` routes requests through: Abacus AI (primary) → OpenAI (fallback) → Internal AI (final fallback)
+- **Multi-Provider Support**: `ai-providers` service integrates with Abacus AI and OpenAI APIs
 - **Cost Optimization**: Platform tracks and optimizes AI usage costs (targeting ~89% cost reduction vs external APIs)
+- **Hybrid Architecture**: Combines external AI services with internal model hosting for optimal cost/performance
 - **Content Generation**: Multiple services leverage AI for automated content creation
 
 ### Data Storage
@@ -107,6 +110,44 @@ Services communicate via Cloud Run URLs following pattern:
 - **Health Checks**: Built into Docker containers and service endpoints
 - **No Formal Test Suite**: Services rely on integration testing via health endpoints
 - **Quality Assurance**: Handled by dedicated `qa-engine` service
+
+## Optimization Guidelines
+
+### Security Requirements (CRITICAL)
+- **CORS Configuration**: NEVER use `allow_origins=["*"]` - always specify exact domains
+  - ✅ Good: `allow_origins=["https://xynergy-platform.com", "https://*.xynergy.com"]`
+  - ❌ Bad: `allow_origins=["*"]` - CRITICAL security vulnerability
+- **Authentication**: All sensitive endpoints must use API key validation
+- **Input Validation**: Use Pydantic models for all user inputs
+
+### Performance & Cost Optimization
+- **Connection Pooling**: Always use shared GCP clients (see `shared/gcp_clients.py`)
+- **Resource Management**: Implement proper cleanup in `@app.on_event("shutdown")`
+- **Database Queries**: Use partitioned tables and specific columns (avoid `SELECT *`)
+- **Caching**: Implement Redis caching for AI responses and frequent queries
+- **Circuit Breakers**: Use `CircuitBreaker` from `phase2_utils` for external calls
+
+### Development Standards
+- **Error Handling**: Always use structured error handling with proper fallbacks
+- **Memory Management**: Clean up global state and connections
+- **Monitoring**: Include performance tracking with `PerformanceMonitor`
+- **Resource Limits**: Set appropriate CPU/memory limits in container configs
+
+### Cost Control Measures
+- **AI Routing**: Maintain intelligent routing (Abacus → OpenAI → Internal) for 89% cost savings
+- **Resource Right-sizing**: Use monitoring data to optimize container allocations
+- **Storage Lifecycle**: Implement proper lifecycle policies for Cloud Storage
+- **Query Optimization**: Use BigQuery partitioning and clustering for cost efficiency
+
+## Optimization Documentation
+
+Key optimization documents available:
+- `OPTIMIZATION_PLAN.md` - Comprehensive optimization strategy
+- `SECURITY_FIXES.md` - Critical security vulnerabilities and fixes
+- `IMPLEMENTATION_ROADMAP.md` - 16-week implementation timeline
+- `COST_OPTIMIZATION_TRACKING.md` - Cost monitoring and tracking dashboard
+
+Target: 35-50% cost reduction while maintaining client experience priority.
 
 ## Important Notes
 

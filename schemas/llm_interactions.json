@@ -1,0 +1,11 @@
+[
+  {"name":"interaction_id","type":"STRING","mode":"REQUIRED"},
+  {"name":"task_type","type":"STRING"},
+  {"name":"prompt","type":"STRING"},
+  {"name":"response","type":"STRING"},
+  {"name":"model_used","type":"STRING"},
+  {"name":"quality_score","type":"FLOAT64"},
+  {"name":"success","type":"BOOLEAN"},
+  {"name":"metadata","type":"JSON"},
+  {"name":"created_at","type":"TIMESTAMP"}
+]

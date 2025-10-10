@@ -1,0 +1,9 @@
+[
+  {"name":"pattern_type","type":"STRING","mode":"REQUIRED"},
+  {"name":"industry","type":"STRING"},
+  {"name":"pattern_data","type":"JSON"},
+  {"name":"confidence_score","type":"FLOAT64"},
+  {"name":"sample_size","type":"INT64"},
+  {"name":"last_updated","type":"TIMESTAMP"},
+  {"name":"created_at","type":"TIMESTAMP"}
+]

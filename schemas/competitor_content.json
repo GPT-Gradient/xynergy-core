@@ -1,0 +1,12 @@
+[
+  {"name":"domain","type":"STRING","mode":"REQUIRED"},
+  {"name":"url","type":"STRING","mode":"REQUIRED"},
+  {"name":"title","type":"STRING"},
+  {"name":"content_type","type":"STRING"},
+  {"name":"word_count","type":"INT64"},
+  {"name":"publish_date","type":"DATE"},
+  {"name":"topic_keywords","type":"STRING","mode":"REPEATED"},
+  {"name":"serp_rankings","type":"JSON"},
+  {"name":"estimated_traffic","type":"INT64"},
+  {"name":"scraped_at","type":"TIMESTAMP"}
+]

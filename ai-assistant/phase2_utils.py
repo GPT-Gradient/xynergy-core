@@ -1,5 +1,5 @@
 import asyncio
-import aiohttp
+import httpx
 import time
 import structlog
 from typing import Dict, Any, Optional
@@ -57,14 +57,14 @@ class CircuitBreaker:
 async def call_service_with_circuit_breaker(url: str, data: Dict = None, circuit_breaker: CircuitBreaker = None) -> Dict[str, Any]:
     """Make HTTP calls with circuit breaker protection"""
     async def make_request():
-        async with aiohttp.ClientSession() as session:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             if data:
-                async with session.post(url, json=data, timeout=30) as response:
-                    return await response.json()
+                response = await client.post(url, json=data)
+                return response.json()
             else:
-                async with session.get(url, timeout=30) as response:
-                    return await response.json()
-    
+                response = await client.get(url)
+                return response.json()
+
     if circuit_breaker:
         return await circuit_breaker.call(make_request)
     else:

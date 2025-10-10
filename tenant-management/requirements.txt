@@ -1,0 +1,10 @@
+fastapi==0.104.1
+uvicorn==0.24.0
+google-cloud-firestore==2.13.1
+google-cloud-secret-manager==2.16.4
+google-cloud-bigquery==3.13.0
+httpx==0.25.0
+pydantic==2.5.0
+structlog==23.1.0
+prometheus-client==0.18.0
+cryptography==41.0.7
