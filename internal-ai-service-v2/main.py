@@ -23,6 +23,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
 from auth import verify_api_key
 from rate_limiting import rate_limit_ai
 
+# Import performance monitoring
+from phase2_utils import PerformanceMonitor, CircuitBreaker, CircuitBreakerConfig
+
 # Configure structured logging
 structlog.configure(
     processors=[
@@ -51,6 +54,9 @@ MODEL_BUCKET = f"{PROJECT_ID}-aso-models"
 storage_client = storage.Client(project=PROJECT_ID)
 firestore_client = firestore.Client(project=PROJECT_ID)
 bigquery_client = bigquery.Client(project=PROJECT_ID)
+
+# Initialize performance monitoring
+performance_monitor = PerformanceMonitor("internal-ai-service-v2")
 
 # FastAPI app
 app = FastAPI(
@@ -216,49 +222,50 @@ async def health_check():
 async def generate(request: GenerateRequest):
     """Generate text using internal LLM"""
 
-    start_time = time.time()
+    with performance_monitor.track_operation("ai_generation"):
+        start_time = time.time()
 
-    try:
-        logger.info("generation_request",
-                   task_type=request.task_type,
-                   tenant_id=request.tenant_id,
-                   prompt_length=len(request.prompt))
+        try:
+            logger.info("generation_request",
+                       task_type=request.task_type,
+                       tenant_id=request.tenant_id,
+                       prompt_length=len(request.prompt))
 
-        # Generate text
-        generated_text = await generate_text(
-            prompt=request.prompt,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-            top_p=request.top_p
-        )
+            # Generate text
+            generated_text = await generate_text(
+                prompt=request.prompt,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                top_p=request.top_p
+            )
 
-        # Calculate metrics
-        tokens_used = estimate_tokens(request.prompt) + estimate_tokens(generated_text)
-        cost_usd = calculate_cost(tokens_used)
-        latency_ms = int((time.time() - start_time) * 1000)
+            # Calculate metrics
+            tokens_used = estimate_tokens(request.prompt) + estimate_tokens(generated_text)
+            cost_usd = calculate_cost(tokens_used)
+            latency_ms = int((time.time() - start_time) * 1000)
 
-        response_data = {
-            "text": generated_text,
-            "tokens_used": tokens_used,
-            "cost_usd": cost_usd,
-            "latency_ms": latency_ms,
-            "model": "llama-3.1-8b-instruct",
-            "cached": False
-        }
+            response_data = {
+                "text": generated_text,
+                "tokens_used": tokens_used,
+                "cost_usd": cost_usd,
+                "latency_ms": latency_ms,
+                "model": "llama-3.1-8b-instruct",
+                "cached": False
+            }
 
-        # Log to BigQuery asynchronously
-        asyncio.create_task(log_to_bigquery(request.dict(), response_data))
+            # Log to BigQuery asynchronously
+            asyncio.create_task(log_to_bigquery(request.dict(), response_data))
 
-        logger.info("generation_complete",
-                   tokens=tokens_used,
-                   cost=cost_usd,
-                   latency_ms=latency_ms)
+            logger.info("generation_complete",
+                       tokens=tokens_used,
+                       cost=cost_usd,
+                       latency_ms=latency_ms)
 
-        return GenerateResponse(**response_data)
+            return GenerateResponse(**response_data)
 
-    except Exception as e:
-        logger.error("generation_error", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            logger.error("generation_error", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/stats", dependencies=[Depends(verify_api_key)])
 async def get_stats():
