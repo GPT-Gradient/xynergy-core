@@ -521,11 +521,18 @@ async def get_dashboard_metrics(request: Request):
         return cached_data
 
     try:
-        # Count beta applications
-        beta_count = len(list(db.collection("beta_applications").stream()))
+        # Count beta applications using aggregation (efficient, doesn't load all docs)
+        from google.cloud.firestore_v1.aggregation import Count
+        beta_query = db.collection("beta_applications")
+        beta_aggregation = beta_query.count(alias="beta_count")
+        beta_result = beta_aggregation.get()
+        beta_count = beta_result[0][0].value
 
-        # Count community members (contact submissions)
-        community_count = len(list(db.collection("contact_submissions").stream()))
+        # Count community members using aggregation (efficient)
+        community_query = db.collection("contact_submissions")
+        community_aggregation = community_query.count(alias="community_count")
+        community_result = community_aggregation.get()
+        community_count = community_result[0][0].value
 
         # Get keyword rankings summary from ASO
         try:
