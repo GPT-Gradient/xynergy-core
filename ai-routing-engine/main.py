@@ -183,8 +183,10 @@ async def generate_ai_response(request: dict):
     try:
         client = await get_http_client()
         if route_decision["provider"] in ["abacus", "openai"]:
-            # Use external AI providers service
-            response = await client.post(
+            # Use external AI providers service with circuit breaker protection
+            response = await call_service_with_circuit_breaker(
+                ai_routing_circuit_breaker,
+                client.post,
                 f"{AI_PROVIDERS_URL}/api/generate/intelligent",
                 json={
                     "prompt": prompt,
@@ -210,8 +212,10 @@ async def generate_ai_response(request: dict):
 
                 return result
 
-            # Fallback to internal AI service
-            response = await client.post(
+            # Fallback to internal AI service with circuit breaker protection
+            response = await call_service_with_circuit_breaker(
+                service_circuit_breaker,
+                client.post,
                 f"{INTERNAL_AI_URL}/api/generate",
                 json={
                     "prompt": prompt,
@@ -299,7 +303,12 @@ async def check_abacus_availability() -> bool:
     """Check if Abacus AI service is available"""
     try:
         client = await get_http_client()
-        response = await client.get(f"{AI_PROVIDERS_URL}/api/providers/status", timeout=5.0)
+        response = await call_service_with_circuit_breaker(
+            ai_routing_circuit_breaker,
+            client.get,
+            f"{AI_PROVIDERS_URL}/api/providers/status",
+            timeout=5.0
+        )
         if response.status_code == 200:
                 status = response.json()
                 return status.get("providers", {}).get("abacus", {}).get("available", False)
@@ -311,7 +320,12 @@ async def check_openai_availability() -> bool:
     """Check if OpenAI service is available"""
     try:
         client = await get_http_client()
-        response = await client.get(f"{AI_PROVIDERS_URL}/api/providers/status", timeout=5.0)
+        response = await call_service_with_circuit_breaker(
+            ai_routing_circuit_breaker,
+            client.get,
+            f"{AI_PROVIDERS_URL}/api/providers/status",
+            timeout=5.0
+        )
         if response.status_code == 200:
                 status = response.json()
                 return status.get("providers", {}).get("openai", {}).get("available", False)
@@ -402,9 +416,15 @@ async def warm_ai_cache():
 
 @app.on_event("shutdown")
 async def cleanup_resources():
-    """Clean up Redis connections on shutdown."""
+    """Clean up Redis connections and HTTP client on shutdown."""
     try:
+        # Close HTTP client connections
+        from http_client import close_http_client
+        await close_http_client()
+
+        # Disconnect Redis
         await redis_cache.disconnect()
+
         print("AI routing engine shutdown complete")
     except Exception as e:
         print(f"Cleanup error: {e}")
