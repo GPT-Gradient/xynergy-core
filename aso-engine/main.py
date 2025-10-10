@@ -25,6 +25,9 @@ from auth import verify_api_key_header
 from rate_limiting import rate_limit_standard, rate_limit_expensive
 from gcp_clients import get_bigquery_client, get_storage_client, get_firestore_client
 
+# Import performance monitoring
+from phase2_utils import PerformanceMonitor, CircuitBreaker, CircuitBreakerConfig
+
 # Configure structured logging
 structlog.configure(
     processors=[
@@ -52,6 +55,10 @@ CONTENT_BUCKET = f"{PROJECT_ID}-aso-content"
 bigquery_client = get_bigquery_client()
 storage_client = get_storage_client()
 firestore_client = get_firestore_client()
+
+# Initialize performance monitoring
+performance_monitor = PerformanceMonitor("aso-engine")
+circuit_breaker = CircuitBreaker(CircuitBreakerConfig())
 
 app = FastAPI(
     title="ASO Engine",
@@ -140,56 +147,57 @@ async def health_check():
 @app.post("/api/content", response_model=ContentResponse, dependencies=[Depends(verify_api_key_header), Depends(rate_limit_expensive)])
 async def create_content(content: ContentPiece):
     """Create new content piece and track in BigQuery"""
-    try:
-        content_id = f"content_{uuid.uuid4().hex[:12]}"
-        created_at = datetime.now()
+    with performance_monitor.track_operation("content_creation"):
+        try:
+            content_id = f"content_{uuid.uuid4().hex[:12]}"
+            created_at = datetime.now()
 
-        # Prepare BigQuery row
-        table_id = f"{PROJECT_ID}.aso_tenant_{content.tenant_id}.content_pieces"
+            # Prepare BigQuery row
+            table_id = f"{PROJECT_ID}.aso_tenant_{content.tenant_id}.content_pieces"
 
-        rows_to_insert = [{
-            "content_id": content_id,
-            "content_type": content.content_type,
-            "keyword_primary": content.keyword_primary,
-            "keyword_secondary": content.keyword_secondary,
-            "status": "draft",
-            "hub_id": content.hub_id,
-            "title": content.title,
-            "meta_description": content.meta_description,
-            "url": content.url,
-            "word_count": content.word_count,
-            "performance_score": None,
-            "ranking_position": None,
-            "monthly_traffic": 0,
-            "monthly_conversions": 0,
-            "conversion_rate": 0.0,
-            "last_optimized": None,
-            "created_at": created_at.isoformat(),
-            "published_at": None,
-            "updated_at": created_at.isoformat()
-        }]
+            rows_to_insert = [{
+                "content_id": content_id,
+                "content_type": content.content_type,
+                "keyword_primary": content.keyword_primary,
+                "keyword_secondary": content.keyword_secondary,
+                "status": "draft",
+                "hub_id": content.hub_id,
+                "title": content.title,
+                "meta_description": content.meta_description,
+                "url": content.url,
+                "word_count": content.word_count,
+                "performance_score": None,
+                "ranking_position": None,
+                "monthly_traffic": 0,
+                "monthly_conversions": 0,
+                "conversion_rate": 0.0,
+                "last_optimized": None,
+                "created_at": created_at.isoformat(),
+                "published_at": None,
+                "updated_at": created_at.isoformat()
+            }]
 
-        errors = bigquery_client.insert_rows_json(table_id, rows_to_insert)
+            errors = bigquery_client.insert_rows_json(table_id, rows_to_insert)
 
-        if errors:
-            logger.error("bigquery_insert_failed", errors=errors, content_id=content_id)
-            raise HTTPException(status_code=500, detail=f"Failed to insert content: {errors}")
+            if errors:
+                logger.error("bigquery_insert_failed", errors=errors, content_id=content_id)
+                raise HTTPException(status_code=500, detail=f"Failed to insert content: {errors}")
 
-        logger.info("content_created",
-                   content_id=content_id,
-                   tenant_id=content.tenant_id,
-                   keyword=content.keyword_primary)
+            logger.info("content_created",
+                       content_id=content_id,
+                       tenant_id=content.tenant_id,
+                       keyword=content.keyword_primary)
 
-        return ContentResponse(
-            content_id=content_id,
-            status="draft",
-            message="Content piece created successfully",
-            created_at=created_at.isoformat()
-        )
+            return ContentResponse(
+                content_id=content_id,
+                status="draft",
+                message="Content piece created successfully",
+                created_at=created_at.isoformat()
+            )
 
-    except Exception as e:
-        logger.error("content_creation_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            logger.error("content_creation_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/content", dependencies=[Depends(verify_api_key_header)])
 async def list_content(
@@ -256,46 +264,47 @@ async def list_content(
 @app.post("/api/keywords", dependencies=[Depends(verify_api_key_header), Depends(rate_limit_standard)])
 async def add_keyword(keyword_data: KeywordData):
     """Add keyword to tracking"""
-    try:
-        table_id = f"{PROJECT_ID}.aso_tenant_{keyword_data.tenant_id}.keywords"
-        created_at = datetime.now()
+    with performance_monitor.track_operation("keyword_tracking"):
+        try:
+            table_id = f"{PROJECT_ID}.aso_tenant_{keyword_data.tenant_id}.keywords"
+            created_at = datetime.now()
 
-        rows_to_insert = [{
-            "keyword": keyword_data.keyword,
-            "search_volume": keyword_data.search_volume,
-            "difficulty_score": keyword_data.difficulty_score,
-            "kgr_score": None,
-            "intent": keyword_data.intent,
-            "current_ranking": None,
-            "best_ranking": None,
-            "target_ranking": 10,
-            "serp_history": None,
-            "competitor_rankings": None,
-            "last_checked": created_at.isoformat(),
-            "priority": keyword_data.priority,
-            "content_id": None,
-            "created_at": created_at.isoformat()
-        }]
+            rows_to_insert = [{
+                "keyword": keyword_data.keyword,
+                "search_volume": keyword_data.search_volume,
+                "difficulty_score": keyword_data.difficulty_score,
+                "kgr_score": None,
+                "intent": keyword_data.intent,
+                "current_ranking": None,
+                "best_ranking": None,
+                "target_ranking": 10,
+                "serp_history": None,
+                "competitor_rankings": None,
+                "last_checked": created_at.isoformat(),
+                "priority": keyword_data.priority,
+                "content_id": None,
+                "created_at": created_at.isoformat()
+            }]
 
-        errors = bigquery_client.insert_rows_json(table_id, rows_to_insert)
+            errors = bigquery_client.insert_rows_json(table_id, rows_to_insert)
 
-        if errors:
-            logger.error("keyword_insert_failed", errors=errors)
-            raise HTTPException(status_code=500, detail=f"Failed to insert keyword: {errors}")
+            if errors:
+                logger.error("keyword_insert_failed", errors=errors)
+                raise HTTPException(status_code=500, detail=f"Failed to insert keyword: {errors}")
 
-        logger.info("keyword_added", keyword=keyword_data.keyword, tenant_id=keyword_data.tenant_id)
+            logger.info("keyword_added", keyword=keyword_data.keyword, tenant_id=keyword_data.tenant_id)
 
-        return {
-            "success": True,
-            "keyword": keyword_data.keyword,
-            "tenant_id": keyword_data.tenant_id,
-            "priority": keyword_data.priority,
-            "created_at": created_at.isoformat()
-        }
+            return {
+                "success": True,
+                "keyword": keyword_data.keyword,
+                "tenant_id": keyword_data.tenant_id,
+                "priority": keyword_data.priority,
+                "created_at": created_at.isoformat()
+            }
 
-    except Exception as e:
-        logger.error("keyword_add_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            logger.error("keyword_add_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/keywords", dependencies=[Depends(verify_api_key_header)])
 async def list_keywords(tenant_id: str = "demo", priority: Optional[str] = None, limit: int = 100):
