@@ -15,7 +15,8 @@ class EmailService:
     """Service for sending email notifications"""
 
     def __init__(self):
-        self.sendgrid_api_key = os.getenv("SENDGRID_API_KEY")
+        self.mailjet_api_key = os.getenv("MAILJET_API_KEY")
+        self.mailjet_api_secret = os.getenv("MAILJET_API_SECRET")
         self.smtp_host = os.getenv("SMTP_HOST")
         self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
         self.smtp_user = os.getenv("SMTP_USER")
@@ -24,9 +25,9 @@ class EmailService:
         self.team_email = os.getenv("TEAM_EMAIL", "hello@clearforge.ai")
 
         # Determine which provider to use
-        if self.sendgrid_api_key:
-            self.provider = "sendgrid"
-            self._init_sendgrid()
+        if self.mailjet_api_key and self.mailjet_api_secret:
+            self.provider = "mailjet"
+            self._init_mailjet()
         elif self.smtp_host and self.smtp_user:
             self.provider = "smtp"
             logger.info("email_service_initialized", provider="smtp")
@@ -34,19 +35,17 @@ class EmailService:
             self.provider = "none"
             logger.warning("email_service_not_configured", message="No email credentials provided")
 
-    def _init_sendgrid(self):
-        """Initialize SendGrid client"""
+    def _init_mailjet(self):
+        """Initialize Mailjet client"""
         try:
-            from sendgrid import SendGridAPIClient
-            from sendgrid.helpers.mail import Mail
-            self.sendgrid_client = SendGridAPIClient(self.sendgrid_api_key)
-            self.sendgrid_mail_class = Mail
-            logger.info("email_service_initialized", provider="sendgrid")
+            from mailjet_rest import Client
+            self.mailjet_client = Client(auth=(self.mailjet_api_key, self.mailjet_api_secret), version='v3.1')
+            logger.info("email_service_initialized", provider="mailjet")
         except ImportError:
-            logger.error("sendgrid_import_error", message="sendgrid library not installed")
+            logger.error("mailjet_import_error", message="mailjet-rest library not installed")
             self.provider = "none"
         except Exception as e:
-            logger.error("sendgrid_init_error", error=str(e))
+            logger.error("mailjet_init_error", error=str(e))
             self.provider = "none"
 
     def is_configured(self) -> bool:
@@ -77,44 +76,56 @@ class EmailService:
             return False
 
         try:
-            if self.provider == "sendgrid":
-                return await self._send_via_sendgrid(to_email, subject, html_content, text_content)
+            if self.provider == "mailjet":
+                return await self._send_via_mailjet(to_email, subject, html_content, text_content)
             elif self.provider == "smtp":
                 return await self._send_via_smtp(to_email, subject, html_content, text_content)
         except Exception as e:
             logger.error("email_send_failed", error=str(e), to=to_email, subject=subject)
             return False
 
-    async def _send_via_sendgrid(
+    async def _send_via_mailjet(
         self,
         to_email: str,
         subject: str,
         html_content: str,
         text_content: Optional[str] = None
     ) -> bool:
-        """Send email via SendGrid API"""
+        """Send email via Mailjet API"""
         try:
-            message = self.sendgrid_mail_class(
-                from_email=self.from_email,
-                to_emails=to_email,
-                subject=subject,
-                html_content=html_content
-            )
-            if text_content:
-                message.plain_text_content = text_content
+            data = {
+                'Messages': [
+                    {
+                        "From": {
+                            "Email": self.from_email,
+                            "Name": "ClearForge"
+                        },
+                        "To": [
+                            {
+                                "Email": to_email
+                            }
+                        ],
+                        "Subject": subject,
+                        "HTMLPart": html_content
+                    }
+                ]
+            }
 
-            response = self.sendgrid_client.send(message)
+            if text_content:
+                data['Messages'][0]['TextPart'] = text_content
+
+            result = self.mailjet_client.send.create(data=data)
 
             logger.info(
-                "email_sent_sendgrid",
+                "email_sent_mailjet",
                 to=to_email,
                 subject=subject,
-                status_code=response.status_code
+                status_code=result.status_code
             )
-            return response.status_code < 300
+            return result.status_code < 300
 
         except Exception as e:
-            logger.error("sendgrid_send_error", error=str(e), to=to_email)
+            logger.error("mailjet_send_error", error=str(e), to=to_email)
             return False
 
     async def _send_via_smtp(

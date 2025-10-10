@@ -17,8 +17,7 @@ class ASOService:
     def __init__(self, aso_engine_url: str):
         self.aso_engine_url = aso_engine_url.rstrip('/')
         self.client = httpx.AsyncClient(
-            timeout=httpx.Timeout(5.0, connect=2.0),
-            http2=True
+            timeout=httpx.Timeout(5.0, connect=2.0)
         )
         self.circuit_breaker_failures = 0
         self.circuit_breaker_last_failure = 0

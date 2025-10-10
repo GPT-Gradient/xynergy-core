@@ -12,9 +12,11 @@
 
 | Secret Name | Purpose | Status |
 |-------------|---------|--------|
-| `xynergy-api-keys` | Platform authentication (2 keys for rotation) | ✅ Deployed to all 21 services |
+| `xynergy-api-keys` | Platform authentication (2 keys for rotation) | ✅ Deployed to all 22 services |
 | `abacus-api-key` | Abacus AI (primary AI provider, 40% cheaper) | ✅ Deployed to AI routing |
 | `openai-api-key` | OpenAI (fallback AI provider, higher quality) | ✅ Deployed to AI routing |
+| `mailjet-api-key` | Mailjet email service (API key) | ✅ Deployed to intelligence gateway |
+| `mailjet-api-secret` | Mailjet email service (API secret) | ✅ Deployed to intelligence gateway |
 | `google-places-api-key` | Google Places API | ✅ Stored (ready for use) |
 | `yelp-api-key` | Yelp Fusion API | ✅ Stored (ready for use) |
 | `google-ai-studio-key` | Google AI Studio | ✅ Stored (ready for use) |
@@ -26,7 +28,7 @@
   - Saves: $1,500-2,500/month in duplicate AI calls
   - **Net Savings**: $1,450-2,450/month
 
-### Services Updated (21 Healthy)
+### Services Updated (22 Healthy)
 
 All services now have:
 - ✅ Secure API authentication (XYNERGY_API_KEYS)
@@ -55,6 +57,7 @@ All services now have:
 19. fact-checking-layer
 20. internal-ai-service-v2
 21. clearforge-website
+22. **xynergy-intelligence-gateway** (+ Mailjet keys)
 
 ### Security Improvements
 
@@ -246,26 +249,27 @@ Expected: All services show `True` except xynergy-tenant-management
 
 ---
 
-## ⏳ Pending: SendGrid Email Configuration
+## ✅ Mailjet Email Configuration Complete
 
-**Waiting For**: SendGrid API key from user
+**Status**: ✅ **DEPLOYED**
 
-**Once Received**, will deploy to:
-- `xynergy-intelligence-gateway` (ClearForge.ai public API)
-- Enables beta application notifications
-- Enables contact form emails
+**Service**: `xynergy-intelligence-gateway` (ClearForge.ai public API)
+- Service URL: https://xynergy-intelligence-gateway-835612502919.us-central1.run.app
+- Email provider: **Mailjet** (switched from SendGrid)
+- Status: Healthy and operational
 
-**Deployment** (when ready):
-```bash
-# Store SendGrid key
-echo -n "SG.your_key_here" | gcloud secrets create sendgrid-api-key --data-file=-
+**Features Enabled**:
+- ✅ Beta application notifications (to hello@clearforge.ai)
+- ✅ Beta application confirmations (to applicants)
+- ✅ Contact form notifications (to hello@clearforge.ai)
+- ✅ Contact form confirmations (to submitters)
 
-# Deploy to Intelligence Gateway
-gcloud run services update xynergy-intelligence-gateway \
-  --region=us-central1 \
-  --update-secrets=SENDGRID_API_KEY=sendgrid-api-key:latest,XYNERGY_API_KEYS=xynergy-api-keys:latest \
-  --update-env-vars=REDIS_HOST=10.229.184.219
-```
+**Mailjet Configuration**:
+- API Key: Stored in Secret Manager (`mailjet-api-key`)
+- API Secret: Stored in Secret Manager (`mailjet-api-secret`)
+- From Email: noreply@clearforge.ai
+- Team Email: hello@clearforge.ai
+- Free tier: 200 emails/day (vs SendGrid's 100/day)
 
 ---
 
@@ -388,10 +392,11 @@ ORDER BY date DESC
 - [x] Deploy AI provider keys (Abacus + OpenAI)
 - [x] Update Redis host on all services
 - [x] Promote traffic to new revisions
-- [x] Verify service health (21/22 healthy)
+- [x] Verify service health (22/23 healthy)
 - [x] Clean up redundant services
 - [x] Document API keys and usage
-- [ ] Deploy SendGrid (waiting for API key)
+- [x] Deploy Mailjet email service (switched from SendGrid)
+- [x] Deploy xynergy-intelligence-gateway (ClearForge.ai public API)
 - [ ] Fix xynergy-tenant-management
 - [ ] Test end-to-end workflows
 - [ ] Set up cost monitoring alerts

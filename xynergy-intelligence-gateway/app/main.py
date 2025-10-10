@@ -85,8 +85,7 @@ app.add_middleware(
 # HTTP client for service-to-service calls
 http_client = httpx.AsyncClient(
     timeout=httpx.Timeout(10.0, connect=5.0),
-    limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
-    http2=True
+    limits=httpx.Limits(max_keepalive_connections=10, max_connections=20)
 )
 
 # ================================
@@ -117,7 +116,7 @@ class ContactSubmission(BaseModel):
     """Contact form submission model"""
     name: str = Field(..., min_length=2, max_length=100)
     email: EmailStr
-    type: str = Field(..., regex="^(beta|partnership|consulting|general|media)$")
+    type: str = Field(..., pattern="^(beta|partnership|consulting|general|media)$")
     message: str = Field(..., min_length=10, max_length=5000)
     company: Optional[str] = Field(None, max_length=200)
     phone: Optional[str] = Field(None, max_length=30)
@@ -135,7 +134,7 @@ async def startup_event():
     cache.set("service_info", {
         "service": "xynergy-intelligence-gateway",
         "version": "1.0.0",
-        "started_at": datetime.now().isoformat()
+        "started_at": time.time()
     }, ttl=3600)
 
     logger.info("intelligence_gateway_started")
@@ -216,11 +215,17 @@ async def health_check():
         "provider": email_service.provider
     }
 
+    service_info = cache.get("service_info") or {}
+    started_at = service_info.get("started_at") if isinstance(service_info, dict) else time.time()
+    if isinstance(started_at, str):
+        # Convert ISO string to timestamp if needed
+        started_at = time.time()
+
     return {
         "status": overall_status,
         "timestamp": datetime.now().isoformat(),
         "checks": checks,
-        "uptime_seconds": int(time.time() - cache.get("service_info", {}).get("started_at", time.time()))
+        "uptime_seconds": int(time.time() - started_at)
     }
 
 # ================================
