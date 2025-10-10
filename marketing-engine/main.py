@@ -23,11 +23,12 @@ import sys
 # Import Phase 2 utilities
 from phase2_utils import PerformanceMonitor, CircuitBreaker, CircuitBreakerConfig
 
-# Import centralized authentication and caching
+# Import centralized authentication, caching, and rate limiting
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
 from auth import verify_api_key, verify_api_key_optional
 from redis_cache import redis_cache
+from rate_limiting import rate_limit_standard, rate_limit_expensive
 
 
 # Configuration
@@ -365,7 +366,7 @@ async def root():
     """
 
 # Create marketing campaign
-@app.post("/campaigns/create", response_model=CampaignResponse, dependencies=[Depends(verify_api_key)])
+@app.post("/campaigns/create", response_model=CampaignResponse, dependencies=[Depends(verify_api_key), Depends(rate_limit_expensive)])
 async def create_campaign(request: CampaignRequest):
     try:
         # Performance monitoring
@@ -429,7 +430,7 @@ async def create_campaign(request: CampaignRequest):
         raise HTTPException(status_code=500, detail=f"Failed to create campaign: {str(e)}")
 
 # AI keyword research
-@app.post("/keywords/research", dependencies=[Depends(verify_api_key)])
+@app.post("/keywords/research", dependencies=[Depends(verify_api_key), Depends(rate_limit_expensive)])
 async def keyword_research(request: KeywordResearchRequest):
     try:
         with performance_monitor.track_operation("keyword_research"):

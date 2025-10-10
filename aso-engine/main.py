@@ -20,8 +20,9 @@ from pydantic import BaseModel, Field
 from google.cloud import bigquery, storage, firestore
 import structlog
 
-# Import authentication
+# Import authentication and rate limiting
 from auth import verify_api_key_header
+from rate_limiting import rate_limit_standard, rate_limit_expensive
 
 # Configure structured logging
 structlog.configure(
@@ -135,7 +136,7 @@ async def health_check():
         "storage_connected": True
     }
 
-@app.post("/api/content", response_model=ContentResponse, dependencies=[Depends(verify_api_key_header)])
+@app.post("/api/content", response_model=ContentResponse, dependencies=[Depends(verify_api_key_header), Depends(rate_limit_expensive)])
 async def create_content(content: ContentPiece):
     """Create new content piece and track in BigQuery"""
     try:
@@ -247,7 +248,7 @@ async def list_content(tenant_id: str = "demo", status: Optional[str] = None, li
         logger.error("content_list_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/keywords", dependencies=[Depends(verify_api_key_header)])
+@app.post("/api/keywords", dependencies=[Depends(verify_api_key_header), Depends(rate_limit_standard)])
 async def add_keyword(keyword_data: KeywordData):
     """Add keyword to tracking"""
     try:
