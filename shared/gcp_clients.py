@@ -152,3 +152,116 @@ def get_publisher_client() -> pubsub_v1.PublisherClient:
 def get_subscriber_client() -> pubsub_v1.SubscriberClient:
     """Convenience function to get Subscriber client."""
     return gcp_clients.get_subscriber_client()
+
+# Firestore retry logic
+import time
+from functools import wraps
+from google.api_core import exceptions as gcp_exceptions
+
+def firestore_retry(max_retries: int = 3, backoff_factor: float = 1.0):
+    """
+    Decorator to add retry logic to Firestore operations.
+
+    Args:
+        max_retries: Maximum number of retry attempts (default 3)
+        backoff_factor: Exponential backoff multiplier (default 1.0)
+
+    Usage:
+        @firestore_retry(max_retries=3, backoff_factor=2.0)
+        def get_document(doc_id):
+            return db.collection("users").document(doc_id).get()
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except (
+                    gcp_exceptions.DeadlineExceeded,
+                    gcp_exceptions.ServiceUnavailable,
+                    gcp_exceptions.InternalServerError,
+                    gcp_exceptions.TooManyRequests,
+                    gcp_exceptions.ResourceExhausted,
+                ) as e:
+                    last_exception = e
+
+                    if attempt < max_retries:
+                        wait_time = backoff_factor * (2 ** attempt)
+                        logger.warning(
+                            f"Firestore operation failed (attempt {attempt + 1}/{max_retries + 1}): {e}. "
+                            f"Retrying in {wait_time}s..."
+                        )
+                        time.sleep(wait_time)
+                    else:
+                        logger.error(
+                            f"Firestore operation failed after {max_retries + 1} attempts: {e}"
+                        )
+                except Exception as e:
+                    # Don't retry on non-transient errors
+                    logger.error(f"Firestore operation failed with non-retryable error: {e}")
+                    raise
+
+            # If we exhausted retries, raise the last exception
+            if last_exception:
+                raise last_exception
+
+        return wrapper
+    return decorator
+
+async def firestore_retry_async(max_retries: int = 3, backoff_factor: float = 1.0):
+    """
+    Async decorator to add retry logic to Firestore operations.
+
+    Args:
+        max_retries: Maximum number of retry attempts (default 3)
+        backoff_factor: Exponential backoff multiplier (default 1.0)
+
+    Usage:
+        @firestore_retry_async(max_retries=3, backoff_factor=2.0)
+        async def get_document(doc_id):
+            return await db.collection("users").document(doc_id).get()
+    """
+    import asyncio
+
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            last_exception = None
+
+            for attempt in range(max_retries + 1):
+                try:
+                    return await func(*args, **kwargs)
+                except (
+                    gcp_exceptions.DeadlineExceeded,
+                    gcp_exceptions.ServiceUnavailable,
+                    gcp_exceptions.InternalServerError,
+                    gcp_exceptions.TooManyRequests,
+                    gcp_exceptions.ResourceExhausted,
+                ) as e:
+                    last_exception = e
+
+                    if attempt < max_retries:
+                        wait_time = backoff_factor * (2 ** attempt)
+                        logger.warning(
+                            f"Firestore operation failed (attempt {attempt + 1}/{max_retries + 1}): {e}. "
+                            f"Retrying in {wait_time}s..."
+                        )
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logger.error(
+                            f"Firestore operation failed after {max_retries + 1} attempts: {e}"
+                        )
+                except Exception as e:
+                    # Don't retry on non-transient errors
+                    logger.error(f"Firestore operation failed with non-retryable error: {e}")
+                    raise
+
+            # If we exhausted retries, raise the last exception
+            if last_exception:
+                raise last_exception
+
+        return wrapper
+    return decorator
