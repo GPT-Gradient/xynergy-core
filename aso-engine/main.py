@@ -284,8 +284,15 @@ async def list_content(
     days_back: int = Field(default=90, ge=1, le=730, description="Days to look back"),
     limit: int = Field(default=50, ge=1, le=1000, description="Maximum number of items to return")
 ):
-    """List content pieces for a tenant with partition pruning"""
+    """List content pieces for a tenant with partition pruning and caching"""
     try:
+        # Check cache first
+        cache_key = f"content_{tenant_id}_{status or 'all'}_{days_back}_{limit}"
+        cached_content = await redis_cache.get("aso_content", cache_key)
+        if cached_content:
+            logger.info("content_cache_hit", tenant_id=tenant_id, status=status)
+            return cached_content
+
         # Use partition pruning to reduce scanned data
         query = f"""
         SELECT
@@ -333,11 +340,17 @@ async def list_content(
                 "published_at": row.published_at.isoformat() if row.published_at else None
             })
 
-        return {
+        content_result = {
             "tenant_id": tenant_id,
             "count": len(content_list),
             "content": content_list
         }
+
+        # Cache for 2 minutes (content lists change more frequently than stats)
+        await redis_cache.set("aso_content", cache_key, content_result, ttl=120)
+        logger.info("content_cache_set", tenant_id=tenant_id, count=len(content_list))
+
+        return content_result
 
     except Exception as e:
         logger.error("content_list_failed", error=str(e))
@@ -395,8 +408,15 @@ async def list_keywords(
     days_back: int = Field(default=365, ge=1, le=730, description="Days to look back"),
     limit: int = 100
 ):
-    """List tracked keywords for a tenant with partition pruning"""
+    """List tracked keywords for a tenant with partition pruning and caching"""
     try:
+        # Check cache first
+        cache_key = f"keywords_{tenant_id}_{priority or 'all'}_{days_back}_{limit}"
+        cached_keywords = await redis_cache.get("aso_keywords", cache_key)
+        if cached_keywords:
+            logger.info("keywords_cache_hit", tenant_id=tenant_id, priority=priority)
+            return cached_keywords
+
         # Use partition pruning on last_checked date
         query = f"""
         SELECT
@@ -444,11 +464,17 @@ async def list_keywords(
                 "last_checked": row.last_checked.isoformat() if row.last_checked else None
             })
 
-        return {
+        keywords_result = {
             "tenant_id": tenant_id,
             "count": len(keywords_list),
             "keywords": keywords_list
         }
+
+        # Cache for 3 minutes (keyword data changes periodically)
+        await redis_cache.set("aso_keywords", cache_key, keywords_result, ttl=180)
+        logger.info("keywords_cache_set", tenant_id=tenant_id, count=len(keywords_list))
+
+        return keywords_result
 
     except Exception as e:
         logger.error("keywords_list_failed", error=str(e))
@@ -540,8 +566,15 @@ async def list_opportunities(
     days_back: int = Field(default=180, ge=1, le=730, description="Days to look back"),
     limit: int = 50
 ):
-    """List optimization opportunities with partition pruning"""
+    """List optimization opportunities with partition pruning and caching"""
     try:
+        # Check cache first
+        cache_key = f"opps_{tenant_id}_{status}_{days_back}_{limit}"
+        cached_opps = await redis_cache.get("aso_opportunities", cache_key)
+        if cached_opps:
+            logger.info("opportunities_cache_hit", tenant_id=tenant_id, status=status)
+            return cached_opps
+
         # Use partition pruning on detected_at date
         query = f"""
         SELECT
@@ -586,11 +619,17 @@ async def list_opportunities(
                 "status": row.status
             })
 
-        return {
+        opps_result = {
             "tenant_id": tenant_id,
             "count": len(opportunities),
             "opportunities": opportunities
         }
+
+        # Cache for 4 minutes (opportunities change but not constantly)
+        await redis_cache.set("aso_opportunities", cache_key, opps_result, ttl=240)
+        logger.info("opportunities_cache_set", tenant_id=tenant_id, count=len(opportunities))
+
+        return opps_result
 
     except Exception as e:
         logger.error("opportunities_list_failed", error=str(e))
