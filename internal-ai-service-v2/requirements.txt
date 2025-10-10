@@ -27,3 +27,6 @@ prometheus-client==0.18.0
 # Async support
 aiofiles==23.2.1
 httpx==0.25.1
+
+# System monitoring
+psutil==5.9.6

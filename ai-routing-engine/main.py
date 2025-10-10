@@ -9,6 +9,7 @@ import httpx
 from datetime import datetime
 from typing import Dict, Any
 import uvicorn
+import psutil
 
 
 # Phase 2 enhancements
@@ -69,11 +70,74 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
+    """Enhanced health check with actual connectivity tests"""
+    health_status = {
         "service": "ai-routing-engine-v2",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "status": "healthy",
+        "checks": {}
     }
+
+    # Test AI Providers endpoint connectivity
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"{AI_PROVIDERS_URL}/health")
+            if response.status_code == 200:
+                health_status["checks"]["ai_providers"] = {"status": "healthy"}
+            else:
+                health_status["checks"]["ai_providers"] = {"status": "degraded", "code": response.status_code}
+                health_status["status"] = "degraded"
+    except Exception as e:
+        health_status["checks"]["ai_providers"] = {"status": "unhealthy", "error": str(e)[:100]}
+        health_status["status"] = "degraded"
+
+    # Test Internal AI Service connectivity
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"{INTERNAL_AI_URL}/health")
+            if response.status_code == 200:
+                health_status["checks"]["internal_ai"] = {"status": "healthy"}
+            else:
+                health_status["checks"]["internal_ai"] = {"status": "degraded", "code": response.status_code}
+    except Exception as e:
+        health_status["checks"]["internal_ai"] = {"status": "unhealthy", "error": str(e)[:100]}
+
+    # Test Redis cache connectivity
+    try:
+        if redis_cache._connected:
+            health_status["checks"]["redis"] = {"status": "healthy"}
+        else:
+            health_status["checks"]["redis"] = {"status": "disconnected"}
+    except Exception as e:
+        health_status["checks"]["redis"] = {"status": "unhealthy", "error": str(e)[:100]}
+
+    # Circuit breaker status
+    try:
+        health_status["checks"]["circuit_breaker"] = {
+            "state": ai_routing_circuit_breaker.state,
+            "failure_count": ai_routing_circuit_breaker.failure_count
+        }
+        if ai_routing_circuit_breaker.state == "OPEN":
+            health_status["status"] = "degraded"
+    except Exception as e:
+        health_status["checks"]["circuit_breaker"] = {"status": "error", "error": str(e)[:100]}
+
+    # Resource usage
+    try:
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        health_status["resources"] = {
+            "memory_mb": round(memory_info.rss / 1024 / 1024, 2),
+            "cpu_percent": process.cpu_percent(interval=0.1),
+            "threads": process.num_threads()
+        }
+    except Exception as e:
+        pass
+
+    # Performance metrics
+    health_status["performance"] = performance_monitor.get_metrics()
+
+    return health_status
 
 # Service Mesh Infrastructure - Workflow Execution Endpoint
 @app.post("/execute", dependencies=[Depends(verify_api_key)])

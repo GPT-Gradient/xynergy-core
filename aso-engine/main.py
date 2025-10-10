@@ -10,6 +10,8 @@ import uuid
 from datetime import datetime, date
 from typing import Dict, List, Optional
 import logging
+import psutil
+import asyncio
 
 # Add shared module to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
@@ -136,13 +138,58 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
+    """Enhanced health check with actual connectivity tests"""
+    health_status = {
         "service": "aso-engine",
         "timestamp": datetime.now().isoformat(),
-        "bigquery_connected": True,
-        "storage_connected": True
+        "status": "healthy",
+        "checks": {}
     }
+
+    # Test BigQuery connectivity
+    try:
+        test_query = f"SELECT 1 as test LIMIT 1"
+        query_job = bigquery_client.query(test_query)
+        list(query_job.result())
+        health_status["checks"]["bigquery"] = {"status": "healthy", "latency_ms": 0}
+    except Exception as e:
+        health_status["checks"]["bigquery"] = {"status": "unhealthy", "error": str(e)[:100]}
+        health_status["status"] = "degraded"
+
+    # Test Cloud Storage connectivity
+    try:
+        bucket = storage_client.bucket(f"{PROJECT_ID}-aso-content")
+        bucket.exists()
+        health_status["checks"]["storage"] = {"status": "healthy"}
+    except Exception as e:
+        health_status["checks"]["storage"] = {"status": "unhealthy", "error": str(e)[:100]}
+        health_status["status"] = "degraded"
+
+    # Test Firestore connectivity
+    try:
+        doc_ref = firestore_client.collection("_health_check").document("test")
+        doc_ref.set({"timestamp": datetime.now().isoformat()}, merge=True)
+        health_status["checks"]["firestore"] = {"status": "healthy"}
+    except Exception as e:
+        health_status["checks"]["firestore"] = {"status": "unhealthy", "error": str(e)[:100]}
+        health_status["status"] = "degraded"
+
+    # Resource usage
+    try:
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        health_status["resources"] = {
+            "memory_mb": round(memory_info.rss / 1024 / 1024, 2),
+            "cpu_percent": process.cpu_percent(interval=0.1),
+            "threads": process.num_threads()
+        }
+    except Exception as e:
+        logger.warning(f"Failed to get resource metrics: {e}")
+
+    # Performance metrics
+    health_status["performance"] = performance_monitor.get_metrics()
+
+    return health_status
 
 @app.post("/api/content", response_model=ContentResponse, dependencies=[Depends(verify_api_key_header), Depends(rate_limit_expensive)])
 async def create_content(content: ContentPiece):

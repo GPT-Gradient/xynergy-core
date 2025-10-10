@@ -17,3 +17,4 @@ prometheus-client==0.18.0
 # Phase 6: Lightweight deployment (token optimization only)
 # Semantic cache disabled temporarily - sentence-transformers==2.2.2 (4GB+ deps)
 redis==5.0.1
+psutil==5.9.6

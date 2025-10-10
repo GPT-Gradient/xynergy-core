@@ -8,9 +8,10 @@ import os
 import sys
 import time
 import asyncio
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 from datetime import datetime
 import logging
+import psutil
 
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -99,6 +100,9 @@ class HealthResponse(BaseModel):
     model_loaded: bool
     gpu_available: bool
     version: str
+    checks: Optional[Dict[str, Any]] = None
+    resources: Optional[Dict[str, Any]] = None
+    performance: Optional[Dict[str, Any]] = None
 
 # Global model state (will be loaded on startup)
 llm_engine = None
@@ -206,17 +210,66 @@ async def startup_event():
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint"""
+    """Enhanced health check with actual connectivity tests"""
 
-    # Check GPU availability (simulated for now)
-    gpu_available = True  # In production: check torch.cuda.is_available()
+    health_status = {
+        "status": "healthy" if model_loaded else "degraded",
+        "model_loaded": model_loaded,
+        "gpu_available": True,  # In production: torch.cuda.is_available()
+        "version": "2.0.0",
+        "checks": {}
+    }
 
-    return HealthResponse(
-        status="healthy" if model_loaded else "degraded",
-        model_loaded=model_loaded,
-        gpu_available=gpu_available,
-        version="2.0.0"
-    )
+    # Test BigQuery connectivity
+    try:
+        test_query = "SELECT 1 as test LIMIT 1"
+        query_job = bigquery_client.query(test_query)
+        list(query_job.result())
+        health_status["checks"]["bigquery"] = {"status": "healthy"}
+    except Exception as e:
+        health_status["checks"]["bigquery"] = {"status": "unhealthy", "error": str(e)[:100]}
+        health_status["status"] = "degraded"
+
+    # Test Firestore connectivity
+    try:
+        doc_ref = firestore_client.collection("_health_check").document("test")
+        doc_ref.set({"timestamp": datetime.utcnow().isoformat()}, merge=True)
+        health_status["checks"]["firestore"] = {"status": "healthy"}
+    except Exception as e:
+        health_status["checks"]["firestore"] = {"status": "unhealthy", "error": str(e)[:100]}
+        health_status["status"] = "degraded"
+
+    # Test Cloud Storage connectivity
+    try:
+        bucket = storage_client.bucket(MODEL_BUCKET)
+        bucket.exists()
+        health_status["checks"]["storage"] = {"status": "healthy"}
+    except Exception as e:
+        health_status["checks"]["storage"] = {"status": "unhealthy", "error": str(e)[:100]}
+        health_status["status"] = "degraded"
+
+    # Model status
+    health_status["checks"]["model"] = {
+        "loaded": model_loaded,
+        "name": MODEL_NAME if model_loaded else None
+    }
+
+    # Resource usage
+    try:
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        health_status["resources"] = {
+            "memory_mb": round(memory_info.rss / 1024 / 1024, 2),
+            "cpu_percent": process.cpu_percent(interval=0.1),
+            "threads": process.num_threads()
+        }
+    except Exception as e:
+        logger.warning(f"Failed to get resource metrics: {e}")
+
+    # Performance metrics
+    health_status["performance"] = performance_monitor.get_metrics()
+
+    return HealthResponse(**health_status)
 
 @app.post("/api/generate", response_model=GenerateResponse, dependencies=[Depends(verify_api_key), Depends(rate_limit_ai)])
 async def generate(request: GenerateRequest):

@@ -19,6 +19,7 @@ import time
 from datetime import datetime
 import json
 import sys
+import psutil
 
 # Import Phase 2 utilities
 from phase2_utils import PerformanceMonitor, CircuitBreaker, CircuitBreakerConfig
@@ -119,14 +120,67 @@ async def shutdown_event():
 
 @app.get("/health")
 async def health_check():
-    cache_status = "connected" if redis_cache._connected else "disconnected"
-    return {
-        "status": "healthy",
+    """Enhanced health check with actual connectivity tests"""
+    health_status = {
         "service": "marketing-engine",
         "timestamp": datetime.utcnow().isoformat(),
         "version": "1.0.0",
-        "cache_status": cache_status
+        "status": "healthy",
+        "checks": {}
     }
+
+    # Test Firestore connectivity
+    try:
+        doc_ref = db.collection("_health_check").document("test")
+        doc_ref.set({"timestamp": datetime.utcnow().isoformat()}, merge=True)
+        health_status["checks"]["firestore"] = {"status": "healthy"}
+    except Exception as e:
+        health_status["checks"]["firestore"] = {"status": "unhealthy", "error": str(e)[:100]}
+        health_status["status"] = "degraded"
+
+    # Test BigQuery connectivity
+    try:
+        bq_client = get_bigquery_client()
+        test_query = "SELECT 1 as test LIMIT 1"
+        query_job = bq_client.query(test_query)
+        list(query_job.result())
+        health_status["checks"]["bigquery"] = {"status": "healthy"}
+    except Exception as e:
+        health_status["checks"]["bigquery"] = {"status": "unhealthy", "error": str(e)[:100]}
+        health_status["status"] = "degraded"
+
+    # Test Pub/Sub connectivity
+    try:
+        topic_path = publisher.topic_path(PROJECT_ID, "marketing-events")
+        publisher.get_topic(request={"topic": topic_path})
+        health_status["checks"]["pubsub"] = {"status": "healthy"}
+    except Exception as e:
+        health_status["checks"]["pubsub"] = {"status": "unhealthy", "error": str(e)[:100]}
+        health_status["status"] = "degraded"
+
+    # Test Redis cache connectivity
+    try:
+        cache_status = "connected" if redis_cache._connected else "disconnected"
+        health_status["checks"]["redis"] = {"status": "healthy" if redis_cache._connected else "degraded"}
+    except Exception as e:
+        health_status["checks"]["redis"] = {"status": "unhealthy", "error": str(e)[:100]}
+
+    # Resource usage
+    try:
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        health_status["resources"] = {
+            "memory_mb": round(memory_info.rss / 1024 / 1024, 2),
+            "cpu_percent": process.cpu_percent(interval=0.1),
+            "threads": process.num_threads()
+        }
+    except Exception as e:
+        logger.warning(f"Failed to get resource metrics: {e}")
+
+    # Performance metrics
+    health_status["performance"] = performance_monitor.get_metrics()
+
+    return health_status
 
 # Service Mesh Infrastructure - Workflow Execution Endpoint
 @app.post("/execute", dependencies=[Depends(verify_api_key)])
