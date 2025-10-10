@@ -1,10 +1,13 @@
 import os
 import sys
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from google.cloud import pubsub_v1, firestore
+import structlog
+from contextvars import ContextVar
+import uuid as uuid_lib
 
 # Phase 4: Shared database client imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
@@ -45,12 +48,55 @@ db = get_firestore_client()  # Phase 4: Shared connection pooling
 performance_monitor = PerformanceMonitor("marketing-engine")
 circuit_breaker = CircuitBreaker(CircuitBreakerConfig(failure_threshold=5, timeout=60))
 
+# Configure structured logging with context vars
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.JSONRenderer()
+    ],
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.stdlib.BoundLogger,
+)
+
+# Get structured logger
+logger = structlog.get_logger()
+
+# Request ID context
+request_id_context: ContextVar[str] = ContextVar("request_id", default="no-request-id")
+
 # FastAPI app with correct title
 app = FastAPI(
     title="Marketing Engine",
     description="AI-powered marketing campaign creation and management",
     version="1.0.0"
 )
+
+# Request ID middleware
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    """Add request ID to all requests for tracing"""
+    request_id = request.headers.get("X-Request-ID", f"req_{uuid_lib.uuid4().hex[:12]}")
+    request_id_context.set(request_id)
+
+    structlog.contextvars.bind_contextvars(
+        request_id=request_id,
+        method=request.method,
+        path=request.url.path
+    )
+
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+
+    structlog.contextvars.clear_contextvars()
+
+    return response
 
 # CORS configuration - Production security hardening
 ALLOWED_ORIGINS = [
@@ -468,7 +514,10 @@ async def create_campaign(request: CampaignRequest):
             topic_path = publisher.topic_path(PROJECT_ID, "xynergy-marketing-events")
             publisher.publish(topic_path, json.dumps(event_data).encode())
 
-            logger.info(f"Campaign created successfully: {campaign_id}")
+            logger.info("campaign_created",
+                       campaign_id=campaign_id,
+                       name=campaign_strategy["name"],
+                       channels=len(campaign_strategy["channels"]))
 
             return CampaignResponse(
                 campaign_id=campaign_id,
@@ -480,7 +529,7 @@ async def create_campaign(request: CampaignRequest):
             )
 
     except Exception as e:
-        logger.error(f"Error creating campaign: {str(e)}")
+        logger.error("campaign_creation_failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to create campaign: {str(e)}")
 
 # AI keyword research
@@ -503,7 +552,10 @@ async def keyword_research(request: KeywordResearchRequest):
 
             db.collection("keyword_research").document(research_id).set(research_doc)
 
-            logger.info(f"Keyword research completed: {research_id}")
+            logger.info("keyword_research_completed",
+                       research_id=research_id,
+                       primary_count=len(keyword_data["primary_keywords"]),
+                       longtail_count=len(keyword_data["long_tail_keywords"]))
 
             return {
                 "research_id": research_id,
@@ -515,7 +567,7 @@ async def keyword_research(request: KeywordResearchRequest):
             }
 
     except Exception as e:
-        logger.error(f"Error in keyword research: {str(e)}")
+        logger.error("keyword_research_failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to perform keyword research: {str(e)}")
 
 # Get campaign details

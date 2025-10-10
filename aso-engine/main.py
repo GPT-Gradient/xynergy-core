@@ -16,11 +16,12 @@ import asyncio
 # Add shared module to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from google.cloud import bigquery, storage, firestore
 import structlog
+from contextvars import ContextVar
 
 # Import authentication, rate limiting, and shared GCP clients
 from auth import verify_api_key_header
@@ -30,9 +31,10 @@ from gcp_clients import get_bigquery_client, get_storage_client, get_firestore_c
 # Import performance monitoring
 from phase2_utils import PerformanceMonitor, CircuitBreaker, CircuitBreakerConfig
 
-# Configure structured logging
+# Configure structured logging with context vars
 structlog.configure(
     processors=[
+        structlog.contextvars.merge_contextvars,  # Merge context vars (request_id, etc.)
         structlog.stdlib.filter_by_level,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
@@ -62,11 +64,36 @@ firestore_client = get_firestore_client()
 performance_monitor = PerformanceMonitor("aso-engine")
 circuit_breaker = CircuitBreaker(CircuitBreakerConfig())
 
+# Request ID context for structured logging
+request_id_context: ContextVar[str] = ContextVar("request_id", default="no-request-id")
+
 app = FastAPI(
     title="ASO Engine",
     description="Adaptive Search Optimization Engine for content management and optimization",
     version="1.0.0"
 )
+
+# Request ID middleware for tracing
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    """Add request ID to all requests for tracing"""
+    request_id = request.headers.get("X-Request-ID", f"req_{uuid.uuid4().hex[:12]}")
+    request_id_context.set(request_id)
+
+    # Bind request_id to structlog context
+    structlog.contextvars.bind_contextvars(
+        request_id=request_id,
+        method=request.method,
+        path=request.url.path
+    )
+
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+
+    # Clear context
+    structlog.contextvars.clear_contextvars()
+
+    return response
 
 # Secure CORS (least-trust model)
 app.add_middleware(

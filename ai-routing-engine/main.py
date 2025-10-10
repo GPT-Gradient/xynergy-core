@@ -10,6 +10,9 @@ from datetime import datetime
 from typing import Dict, Any
 import uvicorn
 import psutil
+import structlog
+from contextvars import ContextVar
+import uuid
 
 
 # Phase 2 enhancements
@@ -40,7 +43,47 @@ from auth import verify_api_key, verify_api_key_optional
 from http_client import get_http_client
 from rate_limiting import rate_limit_ai
 
+# Configure structured logging
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.JSONRenderer()
+    ],
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.stdlib.BoundLogger,
+)
+
+logger = structlog.get_logger()
+request_id_context: ContextVar[str] = ContextVar("request_id", default="no-request-id")
+
 app = FastAPI(title="Xynergy AI Routing Engine", version="2.0.0")
+
+# Request ID middleware
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    """Add request ID for request tracing"""
+    request_id = request.headers.get("X-Request-ID", f"req_{uuid.uuid4().hex[:12]}")
+    request_id_context.set(request_id)
+
+    structlog.contextvars.bind_contextvars(
+        request_id=request_id,
+        method=request.method,
+        path=request.url.path
+    )
+
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+
+    structlog.contextvars.clear_contextvars()
+
+    return response
 
 # Phase 2 initialization
 service_monitor = PerformanceMonitor("ai-routing-engine")
