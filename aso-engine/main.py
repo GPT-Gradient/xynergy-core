@@ -277,10 +277,12 @@ async def create_content(content: ContentPiece):
 async def list_content(
     tenant_id: str = "demo",
     status: Optional[str] = None,
+    days_back: int = Field(default=90, ge=1, le=730, description="Days to look back"),
     limit: int = Field(default=50, ge=1, le=1000, description="Maximum number of items to return")
 ):
-    """List content pieces for a tenant"""
+    """List content pieces for a tenant with partition pruning"""
     try:
+        # Use partition pruning to reduce scanned data
         query = f"""
         SELECT
             content_id,
@@ -294,10 +296,12 @@ async def list_content(
             created_at,
             published_at
         FROM `{PROJECT_ID}.aso_tenant_{tenant_id}.content_pieces`
-        WHERE 1=1
+        WHERE DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days_back DAY)
         """
 
-        query_parameters = []
+        query_parameters = [
+            bigquery.ScalarQueryParameter("days_back", "INT64", days_back)
+        ]
 
         if status:
             query += " AND status = @status"
@@ -381,9 +385,15 @@ async def add_keyword(keyword_data: KeywordData):
             raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/keywords", dependencies=[Depends(verify_api_key_header)])
-async def list_keywords(tenant_id: str = "demo", priority: Optional[str] = None, limit: int = 100):
-    """List tracked keywords for a tenant"""
+async def list_keywords(
+    tenant_id: str = "demo",
+    priority: Optional[str] = None,
+    days_back: int = Field(default=365, ge=1, le=730, description="Days to look back"),
+    limit: int = 100
+):
+    """List tracked keywords for a tenant with partition pruning"""
     try:
+        # Use partition pruning on last_checked date
         query = f"""
         SELECT
             keyword,
@@ -397,10 +407,12 @@ async def list_keywords(tenant_id: str = "demo", priority: Optional[str] = None,
             content_id,
             last_checked
         FROM `{PROJECT_ID}.aso_tenant_{tenant_id}.keywords`
-        WHERE 1=1
+        WHERE DATE(last_checked) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days_back DAY)
         """
 
-        query_parameters = []
+        query_parameters = [
+            bigquery.ScalarQueryParameter("days_back", "INT64", days_back)
+        ]
 
         if priority:
             query += " AND priority = @priority"
@@ -518,9 +530,15 @@ async def detect_opportunities(tenant_id: str = "demo"):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/opportunities", dependencies=[Depends(verify_api_key_header)])
-async def list_opportunities(tenant_id: str = "demo", status: str = "pending", limit: int = 50):
-    """List optimization opportunities"""
+async def list_opportunities(
+    tenant_id: str = "demo",
+    status: str = "pending",
+    days_back: int = Field(default=180, ge=1, le=730, description="Days to look back"),
+    limit: int = 50
+):
+    """List optimization opportunities with partition pruning"""
     try:
+        # Use partition pruning on detected_at date
         query = f"""
         SELECT
             opportunity_id,
@@ -533,13 +551,15 @@ async def list_opportunities(tenant_id: str = "demo", status: str = "pending", l
             detected_at,
             status
         FROM `{PROJECT_ID}.aso_tenant_{tenant_id}.opportunities`
-        WHERE status = @status
+        WHERE DATE(detected_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days_back DAY)
+          AND status = @status
         ORDER BY confidence_score DESC, estimated_traffic DESC
         LIMIT @limit
         """
 
         job_config = bigquery.QueryJobConfig(
             query_parameters=[
+                bigquery.ScalarQueryParameter("days_back", "INT64", days_back),
                 bigquery.ScalarQueryParameter("status", "STRING", status),
                 bigquery.ScalarQueryParameter("limit", "INT64", limit)
             ]
@@ -573,10 +593,13 @@ async def list_opportunities(tenant_id: str = "demo", status: str = "pending", l
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/stats", dependencies=[Depends(verify_api_key_header)])
-async def get_tenant_stats(tenant_id: str = "demo"):
-    """Get tenant statistics"""
+async def get_tenant_stats(
+    tenant_id: str = "demo",
+    days_back: int = Field(default=90, ge=1, le=730, description="Days to calculate stats for")
+):
+    """Get tenant statistics with partition pruning"""
     try:
-        # Content stats
+        # Content stats with partition pruning
         content_query = f"""
         SELECT
             status,
@@ -584,10 +607,14 @@ async def get_tenant_stats(tenant_id: str = "demo"):
             AVG(performance_score) as avg_performance,
             SUM(monthly_traffic) as total_traffic
         FROM `{PROJECT_ID}.aso_tenant_{tenant_id}.content_pieces`
+        WHERE DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days_back DAY)
         GROUP BY status
         """
 
-        content_job = bigquery_client.query(content_query)
+        content_config = bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ScalarQueryParameter("days_back", "INT64", days_back)]
+        )
+        content_job = bigquery_client.query(content_query, job_config=content_config)
         content_results = list(content_job.result())
 
         content_stats = {}
@@ -598,17 +625,21 @@ async def get_tenant_stats(tenant_id: str = "demo"):
                 "total_traffic": row.total_traffic or 0
             }
 
-        # Keywords stats
+        # Keywords stats with partition pruning
         keywords_query = f"""
         SELECT
             priority,
             COUNT(*) as count,
             AVG(current_ranking) as avg_ranking
         FROM `{PROJECT_ID}.aso_tenant_{tenant_id}.keywords`
+        WHERE DATE(last_checked) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days_back DAY)
         GROUP BY priority
         """
 
-        keywords_job = bigquery_client.query(keywords_query)
+        keywords_config = bigquery.QueryJobConfig(
+            query_parameters=[bigquery.ScalarQueryParameter("days_back", "INT64", days_back)]
+        )
+        keywords_job = bigquery_client.query(keywords_query, job_config=keywords_config)
         keywords_results = list(keywords_job.result())
 
         keywords_stats = {}
