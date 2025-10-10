@@ -18,8 +18,8 @@ from typing import Dict, Any, Optional
 import uvicorn
 import logging
 
-# Import performance monitoring
-from phase2_utils import PerformanceMonitor
+# Import performance monitoring and circuit breakers
+from phase2_utils import PerformanceMonitor, CircuitBreaker, CircuitBreakerConfig
 
 # Configuration
 PROJECT_ID = os.getenv("PROJECT_ID", "xynergy-dev-1757909467")
@@ -35,6 +35,19 @@ OPENAI_BASE_URL = "https://api.openai.com/v1"
 
 # Initialize performance monitoring
 performance_monitor = PerformanceMonitor("ai-providers")
+
+# Initialize circuit breakers for external API calls
+abacus_circuit_breaker = CircuitBreaker(CircuitBreakerConfig(
+    failure_threshold=5,
+    timeout=60,
+    half_open_max_calls=3
+))
+
+openai_circuit_breaker = CircuitBreaker(CircuitBreakerConfig(
+    failure_threshold=5,
+    timeout=60,
+    half_open_max_calls=3
+))
 
 app = FastAPI(title="Xynergy AI Providers", version="1.0.0")
 
@@ -106,7 +119,8 @@ async def generate_with_abacus(request: Dict[str, Any]):
             "model": "abacus-default"  # Replace with actual Abacus model name
         }
 
-        client = await get_http_client()
+        async def make_abacus_request():
+            client = await get_http_client()
             try:
                 response = await client.post(
                     f"{ABACUS_BASE_URL}/completions",  # Adjust endpoint
@@ -135,6 +149,9 @@ async def generate_with_abacus(request: Dict[str, Any]):
                 raise HTTPException(status_code=408, detail="Abacus API timeout")
             except httpx.RequestError as e:
                 raise HTTPException(status_code=502, detail=f"Abacus API connection error: {str(e)}")
+
+        # Wrap with circuit breaker
+        return await abacus_circuit_breaker.call(make_abacus_request)
 
     except Exception as e:
         logger.error(f"Abacus generation error: {str(e)}")
@@ -172,7 +189,8 @@ async def generate_with_openai(request: Dict[str, Any]):
             "temperature": temperature
         }
 
-        client = await get_http_client()
+        async def make_openai_request():
+            client = await get_http_client()
             try:
                 response = await client.post(
                     f"{OPENAI_BASE_URL}/chat/completions",
@@ -201,6 +219,9 @@ async def generate_with_openai(request: Dict[str, Any]):
                 raise HTTPException(status_code=408, detail="OpenAI API timeout")
             except httpx.RequestError as e:
                 raise HTTPException(status_code=502, detail=f"OpenAI API connection error: {str(e)}")
+
+        # Wrap with circuit breaker
+        return await openai_circuit_breaker.call(make_openai_request)
 
     except Exception as e:
         logger.error(f"OpenAI generation error: {str(e)}")
