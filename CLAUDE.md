@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Xynergy Platform - AI-Powered Business Operations
 
-This is a microservices-based AI platform built on Google Cloud Platform, consisting of 11+ specialized services that handle autonomous business operations including marketing, content generation, analytics, and project management.
+This is a microservices-based AI platform built on Google Cloud Platform, consisting of 20+ specialized services that handle autonomous business operations including marketing, content generation, analytics, and project management.
 
 ## Architecture Overview
 
@@ -16,20 +16,45 @@ The platform follows a consistent microservice pattern where each service is:
 - **GCP-native**: Integrates with Pub/Sub, BigQuery, Cloud Storage, and Firestore
 
 ### Core Services
+
+**Platform Management**
 - `platform-dashboard`: Central monitoring and control interface
-- `marketing-engine`: AI-powered marketing campaign generation
-- `ai-routing-engine`: Intelligent AI request routing (Abacus → OpenAI → internal)
-- `ai-providers`: External AI API integration (Abacus AI and OpenAI)
-- `ai-assistant`: Conversational AI interface
-- `content-hub`: Content management and storage
-- `analytics-data-layer`: Data processing and analytics
-- `internal-ai-service`: Internal AI model hosting
 - `system-runtime`: Core platform orchestration
-- `scheduler-automation-engine`: Task scheduling and automation
-- `reports-export`: Report generation and export
 - `security-governance`: Security policies and compliance
+- `tenant-management`: Multi-tenant account management
+
+**AI & Intelligence**
+- `ai-routing-engine`: Intelligent AI request routing (Abacus → OpenAI → Internal)
+- `ai-providers`: External AI API integration (Abacus AI and OpenAI)
+- `internal-ai-service`: Internal AI model hosting
+- `ai-assistant`: Conversational AI interface
+- `aso-engine`: Adaptive Search Optimization engine
+
+**Marketing & Content**
+- `marketing-engine`: AI-powered marketing campaign generation
+- `content-hub`: Content management and storage
+- `rapid-content-generator`: Fast content creation
+- `automated-publisher`: Content distribution automation
+- `competitive-analysis-service`: Market intelligence
+
+**Analytics & Reporting**
+- `analytics-data-layer`: Data processing and analytics
+- `reports-export`: Report generation and export
+- `advanced-analytics`: Advanced metrics and insights
+- `keyword-revenue-tracker`: SEO performance tracking
+
+**Operations**
+- `project-management`: Project tracking and coordination
+- `scheduler-automation-engine`: Task scheduling and automation
 - `qa-engine`: Quality assurance and testing
-- `project-management`: Project tracking and management
+
+### Supporting Services
+- `xynergy-intelligence-gateway`: Public-facing API for ClearForge.ai
+- `tenant-onboarding-service`: Automated tenant onboarding with CI/CD
+- `research-coordinator`: Research task orchestration
+- `validation-coordinator`: Data validation pipeline
+- `trending-engine-coordinator`: Trending content analysis
+- `attribution-coordinator`: Attribution tracking
 
 ### Infrastructure Pattern
 - **Terraform**: Infrastructure as code in `/terraform/main.tf`
@@ -139,15 +164,39 @@ Services communicate via Cloud Run URLs following pattern:
 - **Storage Lifecycle**: Implement proper lifecycle policies for Cloud Storage
 - **Query Optimization**: Use BigQuery partitioning and clustering for cost efficiency
 
-## Optimization Documentation
+## Documentation Structure
 
-Key optimization documents available:
-- `OPTIMIZATION_PLAN.md` - Comprehensive optimization strategy
-- `SECURITY_FIXES.md` - Critical security vulnerabilities and fixes
-- `IMPLEMENTATION_ROADMAP.md` - 16-week implementation timeline
-- `COST_OPTIMIZATION_TRACKING.md` - Cost monitoring and tracking dashboard
+### Active Documentation
+- `README.md` - Main project documentation and quick start guide
+- `CLAUDE.md` - This file - AI assistant guidance
+- `ARCHITECTURE.md` - Detailed architecture documentation
+- `DEPLOYMENT_GUIDE.md` - Deployment procedures and best practices
+- `API_INTEGRATION_GUIDE.md` - API integration guide
+- `COST_OPTIMIZATION_TRACKING.md` - Cost monitoring dashboard
+- `SECURITY_FIXES.md` - Security best practices and guidelines
+- `LOCAL_INTEGRATION_ANALYSIS.md` - Local development integration guide
+- `QUICK_REFERENCE.md` - Common tasks and commands
+- `AI_CONFIGURATION.md` - AI service configuration
+- `XYNERGY_API_INTEGRATION_GUIDE.md` - External API integration
+- `XYNERGY_SDK_README.md` - SDK documentation
+- `project-state.md` - Current project status
 
-Target: 35-50% cost reduction while maintaining client experience priority.
+### Service-Specific Documentation
+- `xynergy-intelligence-gateway/README.md` - Intelligence Gateway API
+- `xynergy-intelligence-gateway/TESTING_GUIDE.md` - Testing procedures
+- `tenant-onboarding-service/README.md` - Onboarding service documentation
+- `tenant-onboarding-service/IMPLEMENTATION_SUMMARY.md` - Implementation details
+- `tenant-onboarding-service/TESTING_GUIDE.md` - Testing procedures
+
+### Historical Documentation (Archive)
+Phase reports, planning documents, deployment scripts, and historical files have been moved to `archive/` for reference:
+- `archive/phase-reports/` - Completed phase status reports
+- `archive/documentation/` - Historical planning and implementation docs
+- `archive/deployment-scripts/` - One-time deployment and setup scripts
+- `archive/utilities/` - Migration and testing scripts
+- `archive/templates/` - Deprecated templates and examples
+
+See `archive/README.md` for complete archive index and context.
 
 ## Important Notes
 
