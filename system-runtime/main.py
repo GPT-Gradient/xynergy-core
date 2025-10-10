@@ -1,14 +1,14 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
+import os
+import sys
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from google.cloud import firestore, pubsub_v1, monitoring_v3
 
 # Phase 4: Shared database client imports
-import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
 from gcp_clients import get_firestore_client, get_bigquery_client, get_publisher_client, gcp_clients
-
-import os
 import json
 import asyncio
 import aiohttp
@@ -619,7 +619,7 @@ async def get_system_status():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting system status: {str(e)}")
 
-@app.post("/api/workflows/start")
+@app.post("/api/workflows/start", dependencies=[Depends(verify_api_key)])
 async def start_workflow(workflow_name: str, parameters: dict = None):
     """Start a new workflow"""
     try:
@@ -658,7 +658,7 @@ async def start_workflow(workflow_name: str, parameters: dict = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error starting workflow: {str(e)}")
 
-@app.post("/api/services/{service_name}/trigger")
+@app.post("/api/services/{service_name}/trigger", dependencies=[Depends(verify_api_key)])
 async def trigger_service(service_name: str, action: str, parameters: dict = None):
     """Trigger an action on a specific service"""
     try:

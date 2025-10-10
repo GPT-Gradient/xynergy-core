@@ -4,17 +4,24 @@ Core service for content management, keyword tracking, and optimization recommen
 """
 
 import os
+import sys
 import time
 import uuid
 from datetime import datetime, date
 from typing import Dict, List, Optional
 import logging
 
+# Add shared module to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
+
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from google.cloud import bigquery, storage, firestore
 import structlog
+
+# Import authentication
+from auth import verify_api_key_header
 
 # Configure structured logging
 structlog.configure(
@@ -50,16 +57,24 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Secure CORS
+# Secure CORS (least-trust model)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        f"https://*.{PROJECT_ID}.run.app",
-        "https://*.xynergy.com"
+        "https://clearforge.ai",
+        "https://xynergy.com",
+        "https://dashboard.xynergy.com",
+        f"https://platform-dashboard-{PROJECT_ID.split('-')[-1]}.us-central1.run.app"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["*"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-API-Key",
+        "X-Request-ID"
+    ],
+    max_age=3600
 )
 
 # Request/Response Models
@@ -120,7 +135,7 @@ async def health_check():
         "storage_connected": True
     }
 
-@app.post("/api/content", response_model=ContentResponse)
+@app.post("/api/content", response_model=ContentResponse, dependencies=[Depends(verify_api_key_header)])
 async def create_content(content: ContentPiece):
     """Create new content piece and track in BigQuery"""
     try:
@@ -174,7 +189,7 @@ async def create_content(content: ContentPiece):
         logger.error("content_creation_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/content")
+@app.get("/api/content", dependencies=[Depends(verify_api_key_header)])
 async def list_content(tenant_id: str = "demo", status: Optional[str] = None, limit: int = 50):
     """List content pieces for a tenant"""
     try:
@@ -194,12 +209,17 @@ async def list_content(tenant_id: str = "demo", status: Optional[str] = None, li
         WHERE 1=1
         """
 
+        query_parameters = []
+
         if status:
-            query += f" AND status = '{status}'"
+            query += " AND status = @status"
+            query_parameters.append(bigquery.ScalarQueryParameter("status", "STRING", status))
 
-        query += f" ORDER BY created_at DESC LIMIT {limit}"
+        query += f" ORDER BY created_at DESC LIMIT @limit"
+        query_parameters.append(bigquery.ScalarQueryParameter("limit", "INT64", limit))
 
-        query_job = bigquery_client.query(query)
+        job_config = bigquery.QueryJobConfig(query_parameters=query_parameters)
+        query_job = bigquery_client.query(query, job_config=job_config)
         results = list(query_job.result())
 
         content_list = []
@@ -227,7 +247,7 @@ async def list_content(tenant_id: str = "demo", status: Optional[str] = None, li
         logger.error("content_list_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/keywords")
+@app.post("/api/keywords", dependencies=[Depends(verify_api_key_header)])
 async def add_keyword(keyword_data: KeywordData):
     """Add keyword to tracking"""
     try:
@@ -271,7 +291,7 @@ async def add_keyword(keyword_data: KeywordData):
         logger.error("keyword_add_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/keywords")
+@app.get("/api/keywords", dependencies=[Depends(verify_api_key_header)])
 async def list_keywords(tenant_id: str = "demo", priority: Optional[str] = None, limit: int = 100):
     """List tracked keywords for a tenant"""
     try:
@@ -291,12 +311,17 @@ async def list_keywords(tenant_id: str = "demo", priority: Optional[str] = None,
         WHERE 1=1
         """
 
+        query_parameters = []
+
         if priority:
-            query += f" AND priority = '{priority}'"
+            query += " AND priority = @priority"
+            query_parameters.append(bigquery.ScalarQueryParameter("priority", "STRING", priority))
 
-        query += f" ORDER BY last_checked DESC LIMIT {limit}"
+        query += f" ORDER BY last_checked DESC LIMIT @limit"
+        query_parameters.append(bigquery.ScalarQueryParameter("limit", "INT64", limit))
 
-        query_job = bigquery_client.query(query)
+        job_config = bigquery.QueryJobConfig(query_parameters=query_parameters)
+        query_job = bigquery_client.query(query, job_config=job_config)
         results = list(query_job.result())
 
         keywords_list = []
@@ -324,7 +349,7 @@ async def list_keywords(tenant_id: str = "demo", priority: Optional[str] = None,
         logger.error("keywords_list_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/opportunities/detect")
+@app.post("/api/opportunities/detect", dependencies=[Depends(verify_api_key_header)])
 async def detect_opportunities(tenant_id: str = "demo"):
     """Detect optimization opportunities for a tenant"""
     try:
@@ -403,7 +428,7 @@ async def detect_opportunities(tenant_id: str = "demo"):
         logger.error("opportunity_detection_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/opportunities")
+@app.get("/api/opportunities", dependencies=[Depends(verify_api_key_header)])
 async def list_opportunities(tenant_id: str = "demo", status: str = "pending", limit: int = 50):
     """List optimization opportunities"""
     try:
@@ -419,12 +444,19 @@ async def list_opportunities(tenant_id: str = "demo", status: str = "pending", l
             detected_at,
             status
         FROM `{PROJECT_ID}.aso_tenant_{tenant_id}.opportunities`
-        WHERE status = '{status}'
+        WHERE status = @status
         ORDER BY confidence_score DESC, estimated_traffic DESC
-        LIMIT {limit}
+        LIMIT @limit
         """
 
-        query_job = bigquery_client.query(query)
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("status", "STRING", status),
+                bigquery.ScalarQueryParameter("limit", "INT64", limit)
+            ]
+        )
+
+        query_job = bigquery_client.query(query, job_config=job_config)
         results = list(query_job.result())
 
         opportunities = []
@@ -451,7 +483,7 @@ async def list_opportunities(tenant_id: str = "demo", status: str = "pending", l
         logger.error("opportunities_list_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/stats")
+@app.get("/api/stats", dependencies=[Depends(verify_api_key_header)])
 async def get_tenant_stats(tenant_id: str = "demo"):
     """Get tenant statistics"""
     try:
