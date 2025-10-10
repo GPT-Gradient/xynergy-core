@@ -18,6 +18,9 @@ from typing import Dict, Any, Optional
 import uvicorn
 import logging
 
+# Import performance monitoring
+from phase2_utils import PerformanceMonitor
+
 # Configuration
 PROJECT_ID = os.getenv("PROJECT_ID", "xynergy-dev-1757909467")
 REGION = os.getenv("REGION", "us-central1")
@@ -29,6 +32,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # API Endpoints
 ABACUS_BASE_URL = "https://api.abacus.ai/v1"  # Replace with actual Abacus endpoint
 OPENAI_BASE_URL = "https://api.openai.com/v1"
+
+# Initialize performance monitoring
+performance_monitor = PerformanceMonitor("ai-providers")
 
 app = FastAPI(title="Xynergy AI Providers", version="1.0.0")
 
@@ -203,39 +209,40 @@ async def generate_with_openai(request: Dict[str, Any]):
 @app.post("/api/generate/intelligent", dependencies=[Depends(verify_api_key), Depends(rate_limit_ai)])
 async def generate_with_intelligent_routing(request: Dict[str, Any]):
     """Generate response with intelligent routing: Abacus first, OpenAI fallback"""
-    prompt = request.get("prompt", "")
+    with performance_monitor.track_operation("intelligent_routing"):
+        prompt = request.get("prompt", "")
 
-    if not prompt:
-        raise HTTPException(status_code=400, detail="Prompt is required")
+        if not prompt:
+            raise HTTPException(status_code=400, detail="Prompt is required")
 
-    # Try Abacus first
-    if ABACUS_API_KEY:
-        try:
-            logger.info("Attempting generation with Abacus")
-            abacus_result = await generate_with_abacus(request)
-            logger.info("Abacus generation successful")
-            return abacus_result
-        except HTTPException as e:
-            if e.status_code in [503, 502, 408]:  # Service unavailable, bad gateway, timeout
-                logger.warning(f"Abacus unavailable ({e.status_code}), falling back to OpenAI")
-            else:
-                logger.error(f"Abacus error ({e.status_code}), falling back to OpenAI")
-        except Exception as e:
-            logger.error(f"Abacus unexpected error: {str(e)}, falling back to OpenAI")
+        # Try Abacus first
+        if ABACUS_API_KEY:
+            try:
+                logger.info("Attempting generation with Abacus")
+                abacus_result = await generate_with_abacus(request)
+                logger.info("Abacus generation successful")
+                return abacus_result
+            except HTTPException as e:
+                if e.status_code in [503, 502, 408]:  # Service unavailable, bad gateway, timeout
+                    logger.warning(f"Abacus unavailable ({e.status_code}), falling back to OpenAI")
+                else:
+                    logger.error(f"Abacus error ({e.status_code}), falling back to OpenAI")
+            except Exception as e:
+                logger.error(f"Abacus unexpected error: {str(e)}, falling back to OpenAI")
 
-    # Fallback to OpenAI
-    if OPENAI_API_KEY:
-        try:
-            logger.info("Attempting generation with OpenAI")
-            openai_result = await generate_with_openai(request)
-            openai_result["fallback_used"] = True
-            logger.info("OpenAI generation successful")
-            return openai_result
-        except Exception as e:
-            logger.error(f"OpenAI generation failed: {str(e)}")
-            raise HTTPException(status_code=503, detail="All AI providers unavailable")
-    else:
-        raise HTTPException(status_code=503, detail="No AI providers configured")
+        # Fallback to OpenAI
+        if OPENAI_API_KEY:
+            try:
+                logger.info("Attempting generation with OpenAI")
+                openai_result = await generate_with_openai(request)
+                openai_result["fallback_used"] = True
+                logger.info("OpenAI generation successful")
+                return openai_result
+            except Exception as e:
+                logger.error(f"OpenAI generation failed: {str(e)}")
+                raise HTTPException(status_code=503, detail="All AI providers unavailable")
+        else:
+            raise HTTPException(status_code=503, detail="No AI providers configured")
 
 @app.get("/api/providers/status")
 async def check_providers_status():
