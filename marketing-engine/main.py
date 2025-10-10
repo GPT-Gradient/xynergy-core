@@ -13,7 +13,7 @@ import uuid as uuid_lib
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
 from gcp_clients import get_firestore_client, get_bigquery_client, get_publisher_client, gcp_clients
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uvicorn
 import logging

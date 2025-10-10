@@ -1,25 +1,28 @@
 FROM python:3.11-slim
 
-WORKDIR /app
+# Set working directory to parent so shared modules path works
+WORKDIR /
 
-# Install system dependencies efficiently
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Create shared directory
-RUN mkdir -p /app/shared
+# Copy shared modules to /shared (so /app/../shared works)
+COPY shared/ /shared/
 
-COPY requirements.txt .
+# Create app directory
+RUN mkdir -p /app
+WORKDIR /app
+
+# Copy marketing engine files
+COPY marketing-engine/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py .
-COPY phase2_utils.py .
-
-# Try to copy shared modules if they exist (build context dependent)
-COPY shared/* /app/shared/ 2>/dev/null || true
+COPY marketing-engine/main.py .
+COPY marketing-engine/phase2_utils.py .
 
 # Security: non-root user
 RUN useradd --create-home --shell /bin/bash appuser \
