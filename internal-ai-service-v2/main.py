@@ -5,17 +5,23 @@ Target: 80% of platform AI requests at $0.0002/1K tokens vs $0.003 external APIs
 """
 
 import os
+import sys
 import time
 import asyncio
 from typing import Optional, Dict, List
 from datetime import datetime
 import logging
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from google.cloud import storage, firestore, bigquery
 import structlog
+
+# Import shared authentication and rate limiting
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
+from auth import verify_api_key
+from rate_limiting import rate_limit_ai
 
 # Configure structured logging
 structlog.configure(
@@ -206,7 +212,7 @@ async def health_check():
         version="2.0.0"
     )
 
-@app.post("/api/generate", response_model=GenerateResponse)
+@app.post("/api/generate", response_model=GenerateResponse, dependencies=[Depends(verify_api_key), Depends(rate_limit_ai)])
 async def generate(request: GenerateRequest):
     """Generate text using internal LLM"""
 
@@ -254,7 +260,7 @@ async def generate(request: GenerateRequest):
         logger.error("generation_error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/stats")
+@app.get("/api/stats", dependencies=[Depends(verify_api_key)])
 async def get_stats():
     """Get service statistics"""
 

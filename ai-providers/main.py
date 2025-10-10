@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 import os
@@ -7,10 +7,12 @@ import time
 import asyncio
 import httpx
 
-# Import shared HTTP client
+# Import shared modules
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
 from http_client import get_http_client
+from auth import verify_api_key
+from rate_limiting import rate_limit_ai
 from datetime import datetime
 from typing import Dict, Any, Optional
 import uvicorn
@@ -69,7 +71,7 @@ async def health_check():
         }
     }
 
-@app.post("/api/generate/abacus")
+@app.post("/api/generate/abacus", dependencies=[Depends(verify_api_key), Depends(rate_limit_ai)])
 async def generate_with_abacus(request: Dict[str, Any]):
     """Generate response using Abacus AI"""
     if not ABACUS_API_KEY:
@@ -132,7 +134,7 @@ async def generate_with_abacus(request: Dict[str, Any]):
         logger.error(f"Abacus generation error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Abacus generation failed: {str(e)}")
 
-@app.post("/api/generate/openai")
+@app.post("/api/generate/openai", dependencies=[Depends(verify_api_key), Depends(rate_limit_ai)])
 async def generate_with_openai(request: Dict[str, Any]):
     """Generate response using OpenAI"""
     if not OPENAI_API_KEY:
@@ -198,7 +200,7 @@ async def generate_with_openai(request: Dict[str, Any]):
         logger.error(f"OpenAI generation error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"OpenAI generation failed: {str(e)}")
 
-@app.post("/api/generate/intelligent")
+@app.post("/api/generate/intelligent", dependencies=[Depends(verify_api_key), Depends(rate_limit_ai)])
 async def generate_with_intelligent_routing(request: Dict[str, Any]):
     """Generate response with intelligent routing: Abacus first, OpenAI fallback"""
     prompt = request.get("prompt", "")
