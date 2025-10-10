@@ -8,34 +8,85 @@ from typing import Optional, Set
 from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import logging
+import time
+import threading
 
 logger = logging.getLogger(__name__)
 
 # Security scheme
 security = HTTPBearer()
 
-# Load API keys from environment with validation
-def load_api_keys() -> Set[str]:
-    """Load and validate API keys from environment variable."""
-    keys_string = os.getenv("XYNERGY_API_KEYS", "")
+# Global API key store with thread-safe access
+class APIKeyManager:
+    """Thread-safe API key manager with automatic rotation support."""
 
-    if not keys_string:
-        logger.warning("XYNERGY_API_KEYS environment variable not set - authentication disabled!")
-        return set()
+    def __init__(self, reload_interval: int = 300):
+        """
+        Initialize API key manager.
 
-    # Split, filter empty, and create set
-    keys = set(filter(None, [key.strip() for key in keys_string.split(",")]))
+        Args:
+            reload_interval: Seconds between automatic reloads (default 5 minutes)
+        """
+        self._keys: Set[str] = set()
+        self._lock = threading.RLock()
+        self._last_reload = 0
+        self._reload_interval = reload_interval
+        self._load_keys()
 
-    if not keys:
-        logger.warning("No valid API keys found in XYNERGY_API_KEYS")
-        return set()
+    def _load_keys(self) -> None:
+        """Load API keys from environment variable."""
+        keys_string = os.getenv("XYNERGY_API_KEYS", "")
 
-    logger.info(f"Loaded {len(keys)} valid API keys")
-    return keys
+        if not keys_string:
+            logger.warning("XYNERGY_API_KEYS environment variable not set - authentication disabled!")
+            with self._lock:
+                self._keys = set()
+            return
+
+        # Split, filter empty, and create set
+        keys = set(filter(None, [key.strip() for key in keys_string.split(",")]))
+
+        if not keys:
+            logger.warning("No valid API keys found in XYNERGY_API_KEYS")
+            with self._lock:
+                self._keys = set()
+            return
+
+        with self._lock:
+            old_count = len(self._keys)
+            self._keys = keys
+            self._last_reload = time.time()
+
+        logger.info(f"Loaded {len(keys)} valid API keys (was {old_count})")
+
+    def reload(self) -> int:
+        """Force reload API keys from environment. Returns number of keys loaded."""
+        self._load_keys()
+        return len(self._keys)
+
+    def get_keys(self) -> Set[str]:
+        """Get current API keys, reloading if past interval."""
+        # Auto-reload if past interval
+        if time.time() - self._last_reload > self._reload_interval:
+            self._load_keys()
+
+        with self._lock:
+            return self._keys.copy()
+
+    def validate_key(self, key: str) -> bool:
+        """Check if a key is valid."""
+        return key in self.get_keys()
 
 
-# Global API key store
-VALID_API_KEYS: Set[str] = load_api_keys()
+# Global API key manager (auto-reloads every 5 minutes)
+_api_key_manager = APIKeyManager(reload_interval=300)
+
+# Backward compatibility
+VALID_API_KEYS: Set[str] = _api_key_manager.get_keys()
+
+def reload_api_keys() -> int:
+    """Reload API keys from environment. Returns number of keys loaded."""
+    return _api_key_manager.reload()
 
 
 async def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
@@ -52,7 +103,8 @@ async def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(sec
         HTTPException: If API key is invalid or not configured
     """
     # Check if API keys are configured
-    if not VALID_API_KEYS:
+    keys = _api_key_manager.get_keys()
+    if not keys:
         logger.error("API authentication attempted but no keys configured")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -61,7 +113,7 @@ async def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(sec
         )
 
     # Validate the provided key
-    if credentials.credentials not in VALID_API_KEYS:
+    if not _api_key_manager.validate_key(credentials.credentials):
         logger.warning(f"Invalid API key attempt: {credentials.credentials[:8]}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -115,13 +167,14 @@ async def verify_api_key_header(
             detail="X-API-Key header required",
         )
 
-    if not VALID_API_KEYS:
+    keys = _api_key_manager.get_keys()
+    if not keys:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="API authentication not configured",
         )
 
-    if x_api_key not in VALID_API_KEYS:
+    if not _api_key_manager.validate_key(x_api_key):
         logger.warning(f"Invalid X-API-Key attempt: {x_api_key[:8]}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -171,6 +224,7 @@ __all__ = [
     "verify_api_key_optional",
     "verify_api_key_header",
     "require_auth",
+    "reload_api_keys",
     "VALID_API_KEYS",
     "RateLimitConfig",
 ]
