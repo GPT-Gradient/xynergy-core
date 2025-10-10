@@ -81,15 +81,15 @@ app.add_middleware(
 
 # Request/Response Models
 class ContentPiece(BaseModel):
-    content_type: str = Field(..., description="Type: 'hub' or 'spoke'")
-    keyword_primary: str = Field(..., min_length=1)
-    keyword_secondary: List[str] = Field(default=[])
-    title: str = Field(..., min_length=1)
-    meta_description: Optional[str] = None
-    url: Optional[str] = None
-    word_count: Optional[int] = None
-    hub_id: Optional[str] = None
-    tenant_id: str = Field(default="demo")
+    content_type: str = Field(..., max_length=50, description="Type: 'hub' or 'spoke'")
+    keyword_primary: str = Field(..., min_length=1, max_length=200)
+    keyword_secondary: List[str] = Field(default=[], max_items=50)
+    title: str = Field(..., min_length=1, max_length=500)
+    meta_description: Optional[str] = Field(None, max_length=500)
+    url: Optional[str] = Field(None, max_length=2000)
+    word_count: Optional[int] = Field(None, ge=0, le=50000)
+    hub_id: Optional[str] = Field(None, max_length=100)
+    tenant_id: str = Field(default="demo", max_length=100)
 
 class ContentResponse(BaseModel):
     content_id: str
@@ -98,12 +98,12 @@ class ContentResponse(BaseModel):
     created_at: str
 
 class KeywordData(BaseModel):
-    keyword: str = Field(..., min_length=1)
-    tenant_id: str = Field(default="demo")
-    search_volume: Optional[int] = None
-    difficulty_score: Optional[float] = None
-    intent: Optional[str] = None
-    priority: str = Field(default="tier3")
+    keyword: str = Field(..., min_length=1, max_length=200)
+    tenant_id: str = Field(default="demo", max_length=100)
+    search_volume: Optional[int] = Field(None, ge=0, le=10000000)
+    difficulty_score: Optional[float] = Field(None, ge=0.0, le=100.0)
+    intent: Optional[str] = Field(None, max_length=100)
+    priority: str = Field(default="tier3", max_length=50)
 
 class OpportunityResponse(BaseModel):
     opportunity_id: str
@@ -192,7 +192,11 @@ async def create_content(content: ContentPiece):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/content", dependencies=[Depends(verify_api_key_header)])
-async def list_content(tenant_id: str = "demo", status: Optional[str] = None, limit: int = 50):
+async def list_content(
+    tenant_id: str = "demo",
+    status: Optional[str] = None,
+    limit: int = Field(default=50, ge=1, le=1000, description="Maximum number of items to return")
+):
     """List content pieces for a tenant"""
     try:
         query = f"""

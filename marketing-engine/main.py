@@ -79,11 +79,11 @@ logger = logging.getLogger(__name__)
 
 # Data models
 class CampaignRequest(BaseModel):
-    business_type: str
-    target_audience: str
-    budget_range: str
-    campaign_goals: List[str]
-    preferred_channels: List[str]
+    business_type: str = Field(..., max_length=200)
+    target_audience: str = Field(..., max_length=500)
+    budget_range: str = Field(..., max_length=100)
+    campaign_goals: List[str] = Field(..., max_items=20)
+    preferred_channels: List[str] = Field(..., max_items=20)
 
 class CampaignResponse(BaseModel):
     campaign_id: str
@@ -94,9 +94,9 @@ class CampaignResponse(BaseModel):
     budget_allocation: Dict[str, float]
 
 class KeywordResearchRequest(BaseModel):
-    business_type: str
-    target_market: str
-    competitor_urls: Optional[List[str]] = []
+    business_type: str = Field(..., max_length=200)
+    target_market: str = Field(..., max_length=200)
+    competitor_urls: Optional[List[str]] = Field(default=[], max_items=10)
 
 # Health check endpoint
 @app.on_event("startup")
