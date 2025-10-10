@@ -140,8 +140,11 @@ class PlatformResponse(BaseModel):
 # Active WebSocket connections for real-time updates
 active_connections: List[WebSocket] = []
 
-# Conversation context management
-conversation_contexts = {}  # In-memory store for active conversations
+# Conversation context management with TTL to prevent memory leaks
+from cachetools import TTLCache
+
+# Use TTL cache: max 1000 conversations, 1 hour TTL
+conversation_contexts = TTLCache(maxsize=1000, ttl=3600)
 
 async def get_conversation_context(session_id: str, user_id: str) -> Dict[str, Any]:
     """Retrieve conversation context from memory and Firestore"""

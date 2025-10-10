@@ -184,12 +184,24 @@ class RedisCache:
         return await self.get("api_call", endpoint, params)
 
     async def invalidate_pattern(self, pattern: str) -> int:
-        """Invalidate cache keys matching a pattern."""
+        """Invalidate cache keys matching a pattern using SCAN (non-blocking)."""
         if not self._connected or not self.client:
             return 0
 
         try:
-            keys = await self.client.keys(pattern)
+            # Use SCAN instead of KEYS to avoid blocking Redis
+            keys = []
+            cursor = 0
+            while True:
+                cursor, batch = await self.client.scan(
+                    cursor=cursor,
+                    match=pattern,
+                    count=100
+                )
+                keys.extend(batch)
+                if cursor == 0:
+                    break
+
             if keys:
                 result = await self.client.delete(*keys)
                 logger.info(f"Invalidated {result} cache keys matching pattern: {pattern}")
@@ -209,10 +221,20 @@ class RedisCache:
             info = await self.client.info()
             memory_info = await self.client.info("memory")
 
-            # Count keys by category
+            # Count keys by category using SCAN (non-blocking)
             category_counts = {}
             for category, prefix in self.key_prefixes.items():
-                keys = await self.client.keys(f"{prefix}*")
+                keys = []
+                cursor = 0
+                while True:
+                    cursor, batch = await self.client.scan(
+                        cursor=cursor,
+                        match=f"{prefix}*",
+                        count=100
+                    )
+                    keys.extend(batch)
+                    if cursor == 0:
+                        break
                 category_counts[category] = len(keys)
 
             return {

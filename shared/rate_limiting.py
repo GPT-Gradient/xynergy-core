@@ -31,9 +31,11 @@ class RateLimiter:
         self.requests_per_hour = requests_per_hour
         self.burst_limit = burst_limit
 
-        # Storage: {api_key: [(timestamp, count)]}
-        self.minute_requests: Dict[str, list] = defaultdict(list)
-        self.hour_requests: Dict[str, list] = defaultdict(list)
+        # Storage with max size to prevent unbounded growth
+        # Using LRU cache for most recent identifiers (max 10,000)
+        from cachetools import LRUCache
+        self.minute_requests = LRUCache(maxsize=10000)
+        self.hour_requests = LRUCache(maxsize=10000)
         self.lock = threading.Lock()
 
         # Cleanup thread
@@ -46,23 +48,37 @@ class RateLimiter:
         hour_ago = now - 3600
 
         with self.lock:
-            # Clean minute records
-            for key in list(self.minute_requests.keys()):
-                self.minute_requests[key] = [
-                    (ts, count) for ts, count in self.minute_requests[key]
-                    if ts > minute_ago
-                ]
-                if not self.minute_requests[key]:
-                    del self.minute_requests[key]
+            # Clean minute records (LRUCache is dict-like but has max size)
+            try:
+                for key in list(self.minute_requests.keys()):
+                    if key in self.minute_requests:
+                        requests = self.minute_requests[key]
+                        filtered = [
+                            (ts, count) for ts, count in requests
+                            if ts > minute_ago
+                        ]
+                        if filtered:
+                            self.minute_requests[key] = filtered
+                        else:
+                            del self.minute_requests[key]
+            except RuntimeError:
+                pass  # Dict size changed during iteration
 
             # Clean hour records
-            for key in list(self.hour_requests.keys()):
-                self.hour_requests[key] = [
-                    (ts, count) for ts, count in self.hour_requests[key]
-                    if ts > hour_ago
-                ]
-                if not self.hour_requests[key]:
-                    del self.hour_requests[key]
+            try:
+                for key in list(self.hour_requests.keys()):
+                    if key in self.hour_requests:
+                        requests = self.hour_requests[key]
+                        filtered = [
+                            (ts, count) for ts, count in requests
+                            if ts > hour_ago
+                        ]
+                        if filtered:
+                            self.hour_requests[key] = filtered
+                        else:
+                            del self.hour_requests[key]
+            except RuntimeError:
+                pass  # Dict size changed during iteration
 
     def _start_cleanup_thread(self):
         """Start background cleanup thread."""

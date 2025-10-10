@@ -1,16 +1,17 @@
+import os
+import sys
+
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from google.cloud import pubsub_v1, firestore
 
 # Phase 4: Shared database client imports
-import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
 from gcp_clients import get_firestore_client, get_bigquery_client, get_publisher_client, gcp_clients
 
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-import os
 import uvicorn
 import logging
 import asyncio
