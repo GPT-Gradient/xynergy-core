@@ -20,9 +20,10 @@ from pydantic import BaseModel, Field
 from google.cloud import bigquery, storage, firestore
 import structlog
 
-# Import authentication and rate limiting
+# Import authentication, rate limiting, and shared GCP clients
 from auth import verify_api_key_header
 from rate_limiting import rate_limit_standard, rate_limit_expensive
+from gcp_clients import get_bigquery_client, get_storage_client, get_firestore_client
 
 # Configure structured logging
 structlog.configure(
@@ -47,10 +48,10 @@ PROJECT_ID = os.getenv("PROJECT_ID", "xynergy-dev-1757909467")
 REGION = os.getenv("REGION", "us-central1")
 CONTENT_BUCKET = f"{PROJECT_ID}-aso-content"
 
-# Initialize GCP clients
-bigquery_client = bigquery.Client(project=PROJECT_ID)
-storage_client = storage.Client(project=PROJECT_ID)
-firestore_client = firestore.Client(project=PROJECT_ID)
+# Initialize GCP clients with connection pooling
+bigquery_client = get_bigquery_client()
+storage_client = get_storage_client()
+firestore_client = get_firestore_client()
 
 app = FastAPI(
     title="ASO Engine",
@@ -540,6 +541,16 @@ async def get_tenant_stats(tenant_id: str = "demo"):
     except Exception as e:
         logger.error("stats_generation_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.on_event("shutdown")
+async def cleanup_resources():
+    """Clean up GCP client connections on shutdown."""
+    try:
+        from gcp_clients import gcp_clients
+        await gcp_clients.cleanup()
+        logger.info("ASO Engine shutdown complete")
+    except Exception as e:
+        logger.error("cleanup_error", error=str(e))
 
 if __name__ == "__main__":
     import uvicorn
