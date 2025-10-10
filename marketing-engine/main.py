@@ -429,7 +429,7 @@ async def create_campaign(request: CampaignRequest):
         raise HTTPException(status_code=500, detail=f"Failed to create campaign: {str(e)}")
 
 # AI keyword research
-@app.post("/keywords/research")
+@app.post("/keywords/research", dependencies=[Depends(verify_api_key)])
 async def keyword_research(request: KeywordResearchRequest):
     try:
         with performance_monitor.track_operation("keyword_research"):
@@ -464,7 +464,7 @@ async def keyword_research(request: KeywordResearchRequest):
         raise HTTPException(status_code=500, detail=f"Failed to perform keyword research: {str(e)}")
 
 # Get campaign details
-@app.get("/campaigns/{campaign_id}")
+@app.get("/campaigns/{campaign_id}", dependencies=[Depends(verify_api_key)])
 async def get_campaign(campaign_id: str):
     try:
         doc = db.collection("marketing_campaigns").document(campaign_id).get()
@@ -477,7 +477,7 @@ async def get_campaign(campaign_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to retrieve campaign: {str(e)}")
 
 # Campaign performance analytics
-@app.get("/analytics/performance")
+@app.get("/analytics/performance", dependencies=[Depends(verify_api_key)])
 async def get_performance_analytics():
     try:
         # Get recent campaigns

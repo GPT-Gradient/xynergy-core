@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from google.cloud import firestore, pubsub_v1
@@ -17,6 +17,11 @@ import uvicorn
 # Phase 2 enhancements
 from phase2_utils import CircuitBreaker, CircuitBreakerConfig, call_service_with_circuit_breaker, PerformanceMonitor
 import time
+
+# Import shared authentication
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
+from auth import verify_api_key
 
 
 # Structured logging setup
@@ -379,7 +384,7 @@ async def health_check():
     }
 
 # Service Mesh Infrastructure - Workflow Execution Endpoint
-@app.post("/execute")
+@app.post("/execute", dependencies=[Depends(verify_api_key)])
 async def execute_workflow_step(request: Dict[str, Any]):
     """
     Standardized execution endpoint for AI Assistant workflow orchestration.
@@ -500,7 +505,7 @@ async def execute_workflow_step(request: Dict[str, Any]):
             "service": "platform-dashboard"
         }
 
-@app.get("/api/platform-status")
+@app.get("/api/platform-status", dependencies=[Depends(verify_api_key)])
 @limiter.limit("30/minute")
 async def get_platform_status(request: Request):
     logger.info("Platform status requested", client_ip=get_remote_address(request))
