@@ -23,10 +23,11 @@ from google.cloud import bigquery, storage, firestore
 import structlog
 from contextvars import ContextVar
 
-# Import authentication, rate limiting, and shared GCP clients
+# Import authentication, rate limiting, caching, and shared GCP clients
 from auth import verify_api_key_header
 from rate_limiting import rate_limit_standard, rate_limit_expensive
 from gcp_clients import get_bigquery_client, get_storage_client, get_firestore_client
+from redis_cache import RedisCache
 
 # Import performance monitoring
 from phase2_utils import PerformanceMonitor, CircuitBreaker, CircuitBreakerConfig
@@ -63,6 +64,9 @@ firestore_client = get_firestore_client()
 # Initialize performance monitoring
 performance_monitor = PerformanceMonitor("aso-engine")
 circuit_breaker = CircuitBreaker(CircuitBreakerConfig())
+
+# Initialize Redis cache
+redis_cache = RedisCache()
 
 # Request ID context for structured logging
 request_id_context: ContextVar[str] = ContextVar("request_id", default="no-request-id")
@@ -597,8 +601,15 @@ async def get_tenant_stats(
     tenant_id: str = "demo",
     days_back: int = Field(default=90, ge=1, le=730, description="Days to calculate stats for")
 ):
-    """Get tenant statistics with partition pruning"""
+    """Get tenant statistics with partition pruning and caching"""
     try:
+        # Check cache first
+        cache_key = f"stats_{tenant_id}_{days_back}"
+        cached_stats = await redis_cache.get("aso_stats", cache_key)
+        if cached_stats:
+            logger.info("stats_cache_hit", tenant_id=tenant_id, days_back=days_back)
+            return cached_stats
+
         # Content stats with partition pruning
         content_query = f"""
         SELECT
@@ -649,12 +660,18 @@ async def get_tenant_stats(
                 "avg_ranking": round(row.avg_ranking, 1) if row.avg_ranking else None
             }
 
-        return {
+        stats_result = {
             "tenant_id": tenant_id,
             "content": content_stats,
             "keywords": keywords_stats,
             "generated_at": datetime.now().isoformat()
         }
+
+        # Cache the results for 5 minutes (stats don't change frequently)
+        await redis_cache.set("aso_stats", cache_key, stats_result, ttl=300)
+        logger.info("stats_cache_set", tenant_id=tenant_id, days_back=days_back)
+
+        return stats_result
 
     except Exception as e:
         logger.error("stats_generation_failed", error=str(e))
@@ -662,10 +679,11 @@ async def get_tenant_stats(
 
 @app.on_event("shutdown")
 async def cleanup_resources():
-    """Clean up GCP client connections on shutdown."""
+    """Clean up GCP client connections and Redis on shutdown."""
     try:
         from gcp_clients import gcp_clients
         await gcp_clients.cleanup()
+        await redis_cache.close()
         logger.info("ASO Engine shutdown complete")
     except Exception as e:
         logger.error("cleanup_error", error=str(e))
