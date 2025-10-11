@@ -51,7 +51,7 @@ export const appConfig: Config = {
   },
 
   redis: {
-    host: process.env.REDIS_HOST || '10.0.0.3',
+    host: process.env.REDIS_HOST || '10.229.184.219',
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
     password: process.env.REDIS_PASSWORD,
   },

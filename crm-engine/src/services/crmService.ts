@@ -138,9 +138,12 @@ export class CRMService {
   }
 
   /**
-   * Search/list contacts with filtering
+   * Search/list contacts with filtering (cursor-based pagination for efficiency)
    */
-  async searchContacts(tenantId: string, query: ContactSearchQuery): Promise<{ contacts: Contact[]; total: number }> {
+  async searchContacts(
+    tenantId: string,
+    query: ContactSearchQuery
+  ): Promise<{ contacts: Contact[]; total: number; hasMore: boolean; nextCursor?: string }> {
     let ref: any = this.db
       .collection('tenants')
       .doc(tenantId)
@@ -166,24 +169,47 @@ export class CRMService {
       ref = ref.where('ownerId', '==', query.ownerId);
     }
 
-    // Apply limit and offset
-    const limit = query.limit || 50;
-    const offset = query.offset || 0;
+    // Apply limit (max 100 per page to prevent large queries)
+    const limit = Math.min(query.limit || 50, 100);
 
-    ref = ref.limit(limit).offset(offset);
+    // Cursor-based pagination for better performance
+    if (query.cursor) {
+      try {
+        const lastDocSnap = await this.db
+          .collection('tenants')
+          .doc(tenantId)
+          .collection('contacts')
+          .doc(query.cursor)
+          .get();
+
+        if (lastDocSnap.exists) {
+          ref = ref.startAfter(lastDocSnap);
+        }
+      } catch (error: any) {
+        logger.warn('Invalid pagination cursor', { cursor: query.cursor, error: error.message });
+        // Continue without cursor if invalid
+      }
+    }
+
+    // Fetch one extra to determine if there are more results
+    ref = ref.limit(limit + 1);
 
     const snapshot = await ref.get();
     const contacts: Contact[] = [];
 
     snapshot.forEach((doc: any) => {
-      contacts.push(doc.data() as Contact);
+      contacts.push({ id: doc.id, ...doc.data() } as Contact);
     });
 
+    // Check if there are more results
+    const hasMore = contacts.length > limit;
+    const resultContacts = hasMore ? contacts.slice(0, limit) : contacts;
+
     // Text search on name/email (client-side filtering for now)
-    let filteredContacts = contacts;
+    let filteredContacts = resultContacts;
     if (query.query) {
       const searchLower = query.query.toLowerCase();
-      filteredContacts = contacts.filter(
+      filteredContacts = resultContacts.filter(
         (c) =>
           c.name.toLowerCase().includes(searchLower) ||
           c.email?.toLowerCase().includes(searchLower) ||
@@ -194,6 +220,10 @@ export class CRMService {
     return {
       contacts: filteredContacts,
       total: filteredContacts.length,
+      hasMore,
+      nextCursor: hasMore && filteredContacts.length > 0
+        ? filteredContacts[filteredContacts.length - 1].id
+        : undefined,
     };
   }
 

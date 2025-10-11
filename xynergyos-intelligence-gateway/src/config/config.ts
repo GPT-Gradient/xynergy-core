@@ -60,7 +60,7 @@ export const appConfig: Config = {
   },
 
   redis: {
-    host: process.env.REDIS_HOST || '10.0.0.3',
+    host: process.env.REDIS_HOST || '10.229.184.219',
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
     password: process.env.REDIS_PASSWORD,
   },
@@ -76,10 +76,19 @@ export const appConfig: Config = {
   },
 
   cors: {
-    origins: process.env.CORS_ORIGINS?.split(',') || [
-      'http://localhost:3000',
-      'https://xynergyos.com',
-      'https://*.xynergyos.com',
-    ],
+    origins: process.env.CORS_ORIGINS?.split(',') || (
+      process.env.NODE_ENV === 'production'
+        ? [
+            'https://xynergyos.clearforgetech.com',
+            'https://xynergy-platform.com',
+            'https://*.xynergy.com',
+          ]
+        : [
+            'http://localhost:3000',
+            'http://localhost:5173',
+            'http://localhost:8080',
+            'https://xynergyos.clearforgetech.com',
+          ]
+    ),
   },
 };

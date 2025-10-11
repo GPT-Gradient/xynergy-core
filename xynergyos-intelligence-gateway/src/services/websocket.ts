@@ -11,11 +11,20 @@ interface AuthenticatedSocket extends Socket {
   tenantId?: string;
 }
 
+// Connection limits for DoS protection
+const MAX_CONNECTIONS_PER_USER = 5;
+const MAX_TOTAL_CONNECTIONS = 1000;
+const CONNECTION_TIMEOUT = 300000; // 5 minutes
+const HEARTBEAT_INTERVAL = 25000; // 25 seconds
+const HEARTBEAT_TIMEOUT = 60000; // 60 seconds
+
 export class WebSocketService {
   private io: SocketIOServer;
   private redisClient?: any;
   private redisPubClient?: any;
   private redisSubClient?: any;
+  private connections: Map<string, Set<Socket>> = new Map();
+  private connectionTimestamps: Map<string, number> = new Map();
 
   constructor(httpServer: HttpServer) {
     this.io = new SocketIOServer(httpServer, {
@@ -25,11 +34,16 @@ export class WebSocketService {
         credentials: true,
       },
       path: '/api/xynergyos/v2/stream',
+      maxHttpBufferSize: 1e6, // 1MB max message size
+      pingTimeout: HEARTBEAT_TIMEOUT,
+      pingInterval: HEARTBEAT_INTERVAL,
+      transports: ['websocket', 'polling'],
     });
 
     this.setupMiddleware();
     this.setupHandlers();
     this.initializeRedisAdapter();
+    this.startConnectionCleanup();
   }
 
   private async initializeRedisAdapter(): Promise<void> {
@@ -88,10 +102,58 @@ export class WebSocketService {
 
   private setupHandlers(): void {
     this.io.on('connection', (socket: AuthenticatedSocket) => {
+      const userId = socket.userId || socket.id;
+
+      // Check per-user limit
+      const userConnections = this.connections.get(userId) || new Set();
+      if (userConnections.size >= MAX_CONNECTIONS_PER_USER) {
+        logger.warn('Max connections per user exceeded', {
+          userId,
+          currentConnections: userConnections.size,
+        });
+        socket.emit('error', {
+          code: 'MAX_CONNECTIONS_EXCEEDED',
+          message: 'Maximum connections per user reached',
+        });
+        socket.disconnect();
+        return;
+      }
+
+      // Check global limit
+      const totalConnections = Array.from(this.connections.values())
+        .reduce((sum, set) => sum + set.size, 0);
+      if (totalConnections >= MAX_TOTAL_CONNECTIONS) {
+        logger.warn('Max total connections exceeded', { totalConnections });
+        socket.emit('error', {
+          code: 'SERVICE_CAPACITY_EXCEEDED',
+          message: 'Service at maximum capacity',
+        });
+        socket.disconnect();
+        return;
+      }
+
+      // Track connection
+      userConnections.add(socket);
+      this.connections.set(userId, userConnections);
+      this.connectionTimestamps.set(socket.id, Date.now());
+
       logger.info('WebSocket connected', {
         userId: socket.userId,
         socketId: socket.id,
+        totalConnections: totalConnections + 1,
       });
+
+      // Auto-disconnect stale connections
+      const timeoutId = setTimeout(() => {
+        if (socket.connected) {
+          logger.info('Disconnecting stale connection', {
+            userId,
+            socketId: socket.id,
+          });
+          socket.emit('timeout', { message: 'Connection timeout' });
+          socket.disconnect();
+        }
+      }, CONNECTION_TIMEOUT);
 
       // Subscribe to topics
       socket.on('subscribe', (topics: string[]) => {
@@ -124,6 +186,13 @@ export class WebSocketService {
 
       // Handle disconnect
       socket.on('disconnect', () => {
+        clearTimeout(timeoutId);
+        userConnections.delete(socket);
+        this.connectionTimestamps.delete(socket.id);
+        if (userConnections.size === 0) {
+          this.connections.delete(userId);
+        }
+
         logger.info('WebSocket disconnected', {
           userId: socket.userId,
           socketId: socket.id,
@@ -139,6 +208,39 @@ export class WebSocketService {
         });
       });
     });
+  }
+
+  private startConnectionCleanup(): void {
+    // Periodic cleanup of orphaned connections
+    setInterval(() => {
+      const now = Date.now();
+      let cleaned = 0;
+
+      for (const [socketId, timestamp] of this.connectionTimestamps.entries()) {
+        if (now - timestamp > CONNECTION_TIMEOUT) {
+          logger.warn('Cleaning up orphaned connection', { socketId });
+          this.connectionTimestamps.delete(socketId);
+          cleaned++;
+        }
+      }
+
+      if (cleaned > 0) {
+        logger.info('Orphaned connection cleanup completed', { cleaned });
+      }
+    }, 60000); // Every minute
+  }
+
+  getConnectionStats() {
+    const totalConnections = Array.from(this.connections.values())
+      .reduce((sum, set) => sum + set.size, 0);
+
+    return {
+      totalConnections,
+      uniqueUsers: this.connections.size,
+      maxConnectionsPerUser: MAX_CONNECTIONS_PER_USER,
+      maxTotalConnections: MAX_TOTAL_CONNECTIONS,
+      utilizationPercentage: (totalConnections / MAX_TOTAL_CONNECTIONS) * 100,
+    };
   }
 
   // Broadcast to topic

@@ -55,7 +55,9 @@ export const errorHandler = (
 ): void => {
   const statusCode = err.statusCode || 500;
   const isOperational = err.isOperational || false;
+  const isDevelopment = process.env.NODE_ENV !== 'production';
 
+  // Log full error details (including stack trace)
   logger.error('Request error', {
     error: err.message,
     stack: err.stack,
@@ -63,20 +65,36 @@ export const errorHandler = (
     isOperational,
     path: req.path,
     method: req.method,
+    userId: (req as any).user?.uid,
+    requestId: req.headers['x-request-id'],
   });
 
-  // Don't leak internal errors to clients
-  const message = isOperational
-    ? err.message
-    : 'An unexpected error occurred';
+  // Build error response (NO stack trace in production)
+  const errorResponse: any = {
+    error: {
+      code: err.name || 'INTERNAL_ERROR',
+      message: isDevelopment
+        ? err.message
+        : isOperational
+        ? err.message
+        : 'An unexpected error occurred',
+      requestId: req.headers['x-request-id'] || 'unknown',
+      timestamp: new Date().toISOString(),
+    },
+  };
 
-  res.status(statusCode).json({
-    error: err.name || 'Error',
-    message,
-    ...(err.details && { details: err.details }),
-    timestamp: new Date().toISOString(),
-    requestId: req.headers['x-request-id'] || 'unknown',
-  });
+  // Only include technical details in development
+  if (isDevelopment) {
+    errorResponse.error.stack = err.stack;
+    if (err.details) {
+      errorResponse.error.details = err.details;
+    }
+  } else if (isOperational && err.details) {
+    // Only include details for operational errors in production
+    errorResponse.error.details = err.details;
+  }
+
+  res.status(statusCode).json(errorResponse);
 };
 
 // Async error wrapper

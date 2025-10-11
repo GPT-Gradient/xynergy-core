@@ -25,17 +25,27 @@ class ServiceRouter {
 
       const client = axios.create({
         baseURL: url,
-        timeout: 30000,
+        timeout: 30000,  // Default 30s timeout
         headers: {
           'Content-Type': 'application/json',
+          'Accept-Encoding': 'gzip, deflate',
         },
+        decompress: true,  // Auto-decompress responses
+        maxContentLength: 10 * 1024 * 1024,  // 10MB max response
+        maxBodyLength: 10 * 1024 * 1024,  // 10MB max request
       });
 
-      // Add request interceptor for logging
+      // Add request interceptor for logging and per-request timeouts
       client.interceptors.request.use((config) => {
+        // AI endpoints get longer timeout (120s)
+        if (config.url?.includes('/ai/') || config.url?.includes('/generate')) {
+          config.timeout = 120000;
+        }
+
         logger.debug(`Calling service ${name}`, {
           url: config.url,
           method: config.method,
+          timeout: config.timeout,
         });
         return config;
       });
@@ -95,12 +105,24 @@ class ServiceRouter {
     });
 
     try {
-      // Execute with circuit breaker protection
+      // Execute with circuit breaker protection and request cancellation
       const response = await breaker.execute(async () => {
-        return await client.request({
-          url: endpoint,
-          ...options,
-        });
+        // Add AbortController for clean cancellation
+        const controller = new AbortController();
+        const timeout = setTimeout(
+          () => controller.abort(),
+          options.timeout || 30000
+        );
+
+        try {
+          return await client.request({
+            url: endpoint,
+            ...options,
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
       });
 
       const data = response.data;

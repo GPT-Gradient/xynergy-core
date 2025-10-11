@@ -207,6 +207,16 @@ export class CacheService {
   }
 
   /**
+   * Get the Redis client instance (for sharing with rate limiter)
+   */
+  getClient(): RedisClientType | null {
+    if (!this.connected || !this.client) {
+      throw new Error('Redis client not connected');
+    }
+    return this.client;
+  }
+
+  /**
    * Flush all cache entries (use with caution!)
    */
   async flushAll(): Promise<boolean> {

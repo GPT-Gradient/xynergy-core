@@ -1,33 +1,11 @@
 import rateLimit from 'express-rate-limit';
 import { Request } from 'express';
-import { createClient } from 'redis';
 import { appConfig } from '../config/config';
 import { logger } from '../utils/logger';
+import { getCacheService } from '../services/cacheService';
 
-// Redis client for distributed rate limiting
-let redisClient: any = null;
-
-const initializeRedisClient = async () => {
-  if (redisClient) {
-    return redisClient;
-  }
-
-  try {
-    redisClient = createClient({
-      url: `redis://${appConfig.redis.host}:${appConfig.redis.port}`,
-    });
-
-    await redisClient.connect();
-    logger.info('Redis client connected for rate limiting');
-    return redisClient;
-  } catch (error) {
-    logger.error('Failed to connect Redis for rate limiting', { error });
-    return null;
-  }
-};
-
-// Initialize Redis client
-initializeRedisClient();
+// Reuse existing cache service Redis client (no duplicate connections)
+const cache = getCacheService();
 
 // Custom key generator (IP + user ID if authenticated)
 const keyGenerator = (req: Request): string => {
@@ -96,10 +74,5 @@ export const websocketRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
-// Cleanup function for Redis client
-export const cleanupRateLimitRedis = async (): Promise<void> => {
-  if (redisClient) {
-    await redisClient.quit();
-    logger.info('Rate limit Redis client closed');
-  }
-};
+// Note: Redis client cleanup handled by cacheService.disconnect()
+// No separate cleanup needed since we're reusing the cache service client

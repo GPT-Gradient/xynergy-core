@@ -250,5 +250,6 @@ export interface ContactSearchQuery {
   tags?: string[];
   ownerId?: string;
   limit?: number;
-  offset?: number;
+  offset?: number;  // Deprecated - use cursor instead
+  cursor?: string;  // Cursor-based pagination for better performance
 }
