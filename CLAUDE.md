@@ -9,11 +9,20 @@ This is a microservices-based AI platform built on Google Cloud Platform, consis
 ## Architecture Overview
 
 ### Service Structure
-The platform follows a consistent microservice pattern where each service is:
-- **Python-based**: All services use FastAPI with Python 3.11
-- **Containerized**: Each service has its own Dockerfile and requirements.txt
-- **Self-contained**: Complete service implementation in a single main.py file
-- **GCP-native**: Integrates with Pub/Sub, BigQuery, Cloud Storage, and Firestore
+The platform follows a consistent microservice pattern:
+
+**Python Services (FastAPI)** - Original platform services:
+- **Python 3.11** with FastAPI framework
+- **Single-file**: Complete implementation in `main.py`
+- **Containerized**: Dockerfile + requirements.txt
+- **GCP-native**: Pub/Sub, BigQuery, Cloud Storage, Firestore integration
+
+**TypeScript Services (Intelligence Gateway)** - New communication services:
+- **TypeScript 5.3** with Node.js 20, Express.js 4.18
+- **Modular**: Routes, services, middleware architecture
+- **Multi-stage Docker**: Optimized production builds
+- **Firebase Auth**: All routes authenticated with Firebase Admin SDK
+- **Mock Mode**: Development without real API credentials
 
 ### Core Services
 
@@ -48,8 +57,25 @@ The platform follows a consistent microservice pattern where each service is:
 - `scheduler-automation-engine`: Task scheduling and automation
 - `qa-engine`: Quality assurance and testing
 
-### Supporting Services
-- `xynergy-intelligence-gateway`: Public-facing API for ClearForge.ai
+### Intelligence Gateway Services (TypeScript/Node.js)
+- `xynergyos-intelligence-gateway`: Central API gateway with routing, caching, circuit breakers
+  - URL: `https://xynergyos-intelligence-gateway-835612502919.us-central1.run.app`
+  - Tech: TypeScript 5.3, Express.js, Firebase Auth, Redis (optional), Socket.io
+  - Features: Service mesh routing, WebSocket events, rate limiting
+
+- `slack-intelligence-service`: Slack workspace integration
+  - URL: `https://slack-intelligence-service-835612502919.us-central1.run.app`
+  - Features: Channel management, messaging, user lookup, search (mock mode)
+
+- `gmail-intelligence-service`: Gmail email intelligence & management
+  - URL: `https://gmail-intelligence-service-835612502919.us-central1.run.app`
+  - Features: Email read/send, search, threads (mock mode, OAuth-ready)
+
+- `crm-engine`: Contact & relationship management
+  - URL: `https://crm-engine-vgjxy554mq-uc.a.run.app`
+  - Features: Contact CRUD, interaction tracking, notes, tasks (Firestore tenant-isolated)
+
+### Supporting Services (Python/FastAPI)
 - `tenant-onboarding-service`: Automated tenant onboarding with CI/CD
 - `research-coordinator`: Research task orchestration
 - `validation-coordinator`: Data validation pipeline
@@ -78,6 +104,18 @@ Build and run individual services:
 cd <service-directory>
 docker build -t xynergy-<service-name> .
 docker run -p 8080:8080 xynergy-<service-name>
+```
+
+### TypeScript Services Development (Intelligence Gateway)
+```bash
+cd <typescript-service-directory>
+npm install
+npm run build
+npm run dev  # Development mode with hot reload
+
+# Build and deploy with Cloud Build
+gcloud builds submit --tag us-central1-docker.pkg.dev/xynergy-dev-1757909467/xynergy-services/<service-name> --project xynergy-dev-1757909467
+gcloud run deploy <service-name> --image us-central1-docker.pkg.dev/xynergy-dev-1757909467/xynergy-services/<service-name>:latest --region us-central1 --project xynergy-dev-1757909467
 ```
 
 ### Infrastructure Management
@@ -181,9 +219,21 @@ Services communicate via Cloud Run URLs following pattern:
 - `XYNERGY_SDK_README.md` - SDK documentation
 - `project-state.md` - Current project status
 
+### Intelligence Gateway Documentation (Weeks 1-8)
+- `WEEK1_INTELLIGENCE_GATEWAY_COMPLETE.md` - Week 1 completion report
+- `WEEK2_INTELLIGENCE_GATEWAY_COMPLETE.md` - Week 2 completion report
+- `WEEK3_INTELLIGENCE_GATEWAY_COMPLETE.md` - Week 3 completion report
+- `WEEK4_SLACK_INTELLIGENCE_COMPLETE.md` - Slack service complete
+- `WEEK5-6_CRM_ENGINE_COMPLETE.md` - CRM Engine complete
+- `WEEK7-8_GMAIL_INTELLIGENCE_COMPLETE.md` - Gmail service complete
+- `GATEWAY_DEPLOYMENT_COMPLETE.md` - Gateway deployment summary
+- `WEEK4_QUICK_REFERENCE.md` - Quick reference guide
+
 ### Service-Specific Documentation
-- `xynergy-intelligence-gateway/README.md` - Intelligence Gateway API
-- `xynergy-intelligence-gateway/TESTING_GUIDE.md` - Testing procedures
+- `xynergyos-intelligence-gateway/` - Gateway service (TypeScript)
+- `slack-intelligence-service/` - Slack service (TypeScript)
+- `gmail-intelligence-service/` - Gmail service (TypeScript)
+- `crm-engine/` - CRM Engine (TypeScript)
 - `tenant-onboarding-service/README.md` - Onboarding service documentation
 - `tenant-onboarding-service/IMPLEMENTATION_SUMMARY.md` - Implementation details
 - `tenant-onboarding-service/TESTING_GUIDE.md` - Testing procedures
