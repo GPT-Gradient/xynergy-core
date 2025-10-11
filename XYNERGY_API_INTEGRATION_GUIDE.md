@@ -1,44 +1,223 @@
 # Xynergy Platform API Integration Guide
 
+**Last Updated:** October 2025
+**Version:** 2.0 - Intelligence Gateway Integration
+
 ## Table of Contents
 1. [Overview](#overview)
-2. [Authentication](#authentication)
-3. [Service Discovery](#service-discovery)
-4. [Core API Patterns](#core-api-patterns)
-5. [Service-Specific APIs](#service-specific-apis)
-6. [Workflow Orchestration](#workflow-orchestration)
-7. [Real-time Communication](#real-time-communication)
-8. [Error Handling & Circuit Breakers](#error-handling--circuit-breakers)
-9. [Dashboard Integration Patterns](#dashboard-integration-patterns)
-10. [SDK Usage Examples](#sdk-usage-examples)
+2. [Intelligence Gateway](#intelligence-gateway-new)
+3. [Authentication](#authentication)
+4. [Service Discovery](#service-discovery)
+5. [Core API Patterns](#core-api-patterns)
+6. [Service-Specific APIs](#service-specific-apis)
+7. [Workflow Orchestration](#workflow-orchestration)
+8. [Real-time Communication](#real-time-communication)
+9. [Error Handling & Circuit Breakers](#error-handling--circuit-breakers)
+10. [Dashboard Integration Patterns](#dashboard-integration-patterns)
+11. [SDK Usage Examples](#sdk-usage-examples)
 
 ## Overview
 
-The Xynergy Platform is a microservices-based AI platform built on Google Cloud Platform, consisting of 15+ specialized services that handle autonomous business operations. This guide provides comprehensive documentation for integrating with the platform APIs to build management dashboards and external applications.
+The Xynergy Platform is a microservices-based AI platform built on Google Cloud Platform, consisting of 20+ specialized services that handle autonomous business operations. This guide provides comprehensive documentation for integrating with the platform APIs to build management dashboards and external applications.
 
 ### Platform Architecture
-- **Microservices**: 15+ independent services with REST APIs
+- **Microservices**: 20+ independent services with REST APIs
+- **Gateway**: Intelligence Gateway for unified API access
 - **Communication**: HTTP APIs + Pub/Sub messaging + WebSocket real-time
-- **Authentication**: API key-based authentication with HTTPBearer
+- **Authentication**: Dual-mode (Firebase + JWT) via Intelligence Gateway
 - **Security**: Hardened CORS, rate limiting, circuit breakers
 - **Optimization**: AI routing for 89% cost savings, connection pooling, caching
 
-### Base URLs
-All services follow the pattern: `https://xynergy-{service-name}-*.us-central1.run.app`
+### Primary Integration Point: Intelligence Gateway
 
-**Core Services:**
-- Platform Dashboard: `:8080`
-- Marketing Engine: `:8081`
-- AI Assistant: `:8082`
-- Content Hub: `:8083`
-- System Runtime: `:8084`
-- AI Routing Engine: `:8085`
+**All frontend/external integrations should go through the Intelligence Gateway:**
+
+**Gateway URL:** `https://xynergy-intelligence-gateway-835612502919.us-central1.run.app`
+
+**Why Use the Gateway:**
+- ✅ Unified authentication (Firebase or JWT)
+- ✅ Circuit breakers and fault tolerance
+- ✅ Response caching (85%+ hit rate)
+- ✅ Rate limiting and security
+- ✅ Path aliases for backward compatibility
+- ✅ WebSocket support for real-time events
+
+### Base URLs
+
+**Primary Gateway Routes:**
+- Intelligence Gateway: `https://xynergy-intelligence-gateway-835612502919.us-central1.run.app`
+  - Slack: `/api/v2/slack/*`
+  - Gmail/Email: `/api/v2/gmail/*` or `/api/v2/email/*`
+  - CRM: `/api/v2/crm/*`
+  - AI Assistant: `/api/v1/ai/*`
+  - Marketing: `/api/v1/marketing/*`
+  - ASO: `/api/v1/aso/*`
+
+**Direct Service URLs** (use gateway instead when possible):
+- Platform Dashboard: `https://xynergy-platform-dashboard-*.us-central1.run.app`
+- Marketing Engine: `https://marketing-engine-*.us-central1.run.app`
+- AI Routing Engine: `https://xynergy-ai-routing-engine-*.us-central1.run.app`
+
+## Intelligence Gateway (NEW)
+
+### Overview
+
+The Intelligence Gateway is the unified entry point for all frontend and external API integrations. It provides authentication, routing, caching, and fault tolerance.
+
+### Gateway Features
+
+**Authentication:**
+- Supports both Firebase tokens and JWT tokens
+- Automatic fallback (tries Firebase first, then JWT)
+- Compatible with xynergyos-backend JWT tokens
+
+**Routing:**
+- Service mesh routing to all backend services
+- Path aliases for backward compatibility
+- Circuit breakers for fault tolerance
+
+**Performance:**
+- 85%+ cache hit rate with Redis
+- 57-71% faster response times (350ms → 150ms P95)
+- Request/response compression
+
+**Security:**
+- Exact origin whitelisting (no wildcards)
+- Rate limiting (100 req/min per user)
+- CORS configured for production frontend
+
+### Gateway Endpoints
+
+#### Communication Intelligence
+
+**Slack Integration:**
+```http
+GET /api/v2/slack/channels
+GET /api/v2/slack/channels/:channelId/messages
+POST /api/v2/slack/channels/:channelId/messages
+GET /api/v2/slack/users
+GET /api/v2/slack/search
+```
+
+**Gmail Integration:**
+```http
+GET /api/v2/gmail/messages
+GET /api/v2/gmail/messages/:id
+POST /api/v2/gmail/messages
+GET /api/v2/gmail/search
+GET /api/v2/gmail/threads/:id
+```
+*Alias:* `/api/v2/email/*` (same endpoints)
+
+#### CRM
+
+```http
+GET  /api/v2/crm/contacts
+POST /api/v2/crm/contacts
+GET  /api/v2/crm/contacts/:id
+PATCH /api/v2/crm/contacts/:id
+DELETE /api/v2/crm/contacts/:id
+GET  /api/v2/crm/contacts/:id/interactions
+POST /api/v2/crm/interactions
+GET  /api/v2/crm/statistics
+```
+
+#### AI Assistant
+
+```http
+POST /api/v1/ai/query
+POST /api/v1/ai/chat
+GET  /api/v1/ai/history
+```
+
+#### Marketing Engine
+
+```http
+POST /api/v1/marketing/campaign
+GET  /api/v1/marketing/campaigns
+POST /api/v1/marketing/content
+```
+
+#### ASO Engine
+
+```http
+POST /api/v1/aso/optimize
+GET  /api/v1/aso/keywords
+GET  /api/v1/aso/analysis
+```
+
+### WebSocket Connection
+
+Real-time event streaming:
+
+```javascript
+const socket = io('https://xynergy-intelligence-gateway-835612502919.us-central1.run.app', {
+  path: '/api/xynergyos/v2/stream',
+  auth: {
+    token: 'YOUR_JWT_OR_FIREBASE_TOKEN'
+  }
+});
+
+// Subscribe to topics
+socket.emit('subscribe', ['slack', 'gmail', 'crm']);
+
+// Listen for events
+socket.on('slack:new_message', (data) => {
+  console.log('New Slack message:', data);
+});
+
+socket.on('email:new_message', (data) => {
+  console.log('New email:', data);
+});
+
+socket.on('crm:contact_created', (data) => {
+  console.log('New CRM contact:', data);
+});
+```
 
 ## Authentication
 
-### API Key Authentication
+### Dual Authentication System
 
-All protected endpoints require API key authentication via HTTPBearer tokens.
+The Intelligence Gateway supports two authentication methods:
+
+#### Option 1: JWT Authentication (Recommended for existing apps)
+
+Use JWT tokens from xynergyos-backend login endpoint.
+
+**Request Headers:**
+```http
+Authorization: Bearer <JWT_TOKEN>
+Content-Type: application/json
+```
+
+**JWT Token Structure:**
+```json
+{
+  "user_id": "user-123",
+  "tenant_id": "clearforge",
+  "email": "user@example.com",
+  "roles": ["admin"],
+  "exp": 1760241400
+}
+```
+
+**Example:**
+```javascript
+const response = await fetch(
+  'https://xynergy-intelligence-gateway-835612502919.us-central1.run.app/api/v2/crm/contacts',
+  {
+    headers: {
+      'Authorization': `Bearer ${jwtToken}`,
+      'Content-Type': 'application/json'
+    }
+  }
+);
+```
+
+#### Option 2: Firebase Authentication
+
+Use Firebase ID tokens for new integrations.
 
 **Request Headers:**
 ```http

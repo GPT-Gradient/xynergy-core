@@ -10,10 +10,14 @@ interface Config {
   // Service URLs
   services: {
     aiRouting: string;
+    aiAssistant: string;
     slackIntelligence: string;
     gmailIntelligence: string;
     calendarIntelligence: string;
     crmEngine: string;
+    marketingEngine: string;
+    asoEngine: string;
+    researchCoordinator: string;
   };
 
   // Redis
@@ -50,6 +54,8 @@ export const appConfig: Config = {
   services: {
     aiRouting: process.env.AI_ROUTING_URL ||
       'https://xynergy-ai-routing-engine-835612502919.us-central1.run.app',
+    aiAssistant: process.env.AI_ASSISTANT_URL ||
+      'https://xynergy-ai-assistant-vgjxy554mq-uc.a.run.app',
     slackIntelligence: process.env.SLACK_INTELLIGENCE_URL ||
       'https://slack-intelligence-service-835612502919.us-central1.run.app',
     gmailIntelligence: process.env.GMAIL_INTELLIGENCE_URL ||
@@ -57,6 +63,11 @@ export const appConfig: Config = {
     calendarIntelligence: process.env.CALENDAR_INTELLIGENCE_URL || '',
     crmEngine: process.env.CRM_ENGINE_URL ||
       'https://crm-engine-vgjxy554mq-uc.a.run.app',
+    marketingEngine: process.env.MARKETING_ENGINE_URL ||
+      'https://marketing-engine-vgjxy554mq-uc.a.run.app',
+    asoEngine: process.env.ASO_ENGINE_URL ||
+      'https://aso-engine-vgjxy554mq-uc.a.run.app',
+    researchCoordinator: process.env.RESEARCH_COORDINATOR_URL || '',
   },
 
   redis: {
@@ -79,14 +90,17 @@ export const appConfig: Config = {
     origins: process.env.CORS_ORIGINS?.split(',') || (
       process.env.NODE_ENV === 'production'
         ? [
+            'https://xynergyos-frontend-vgjxy554mq-uc.a.run.app',
             'https://xynergyos.clearforgetech.com',
             'https://xynergy-platform.com',
             'https://*.xynergy.com',
+            'https://*.xynergyos.com',
           ]
         : [
             'http://localhost:3000',
             'http://localhost:5173',
             'http://localhost:8080',
+            'https://xynergyos-frontend-vgjxy554mq-uc.a.run.app',
             'https://xynergyos.clearforgetech.com',
           ]
     ),

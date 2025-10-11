@@ -1,9 +1,113 @@
-# Quick Reference - Phase 2 Deployment
+# Quick Reference - Platform Integration Complete
 
-**Status**: ✅ LIVE (October 9, 2025)
-**Services Optimized**: 16/17 (94%)
+**Status**: ✅ LIVE (October 10, 2025)
+**Services Deployed**: 20+ services (Intelligence Gateway integration complete)
+**Intelligence Gateway**: ✅ Production-ready with dual authentication
 **Monthly Savings**: $3,550-5,125 (activated)
 **Annual Impact**: $49,200-85,200
+
+---
+
+## 🌐 Intelligence Gateway (NEW)
+
+### Primary Gateway URL
+```
+https://xynergy-intelligence-gateway-835612502919.us-central1.run.app
+```
+
+### Quick Test Commands
+```bash
+# Test health
+curl https://xynergy-intelligence-gateway-835612502919.us-central1.run.app/health
+
+# Test with JWT token (after collecting JWT_SECRET)
+export JWT_TOKEN="your_jwt_token_here"
+curl -H "Authorization: Bearer $JWT_TOKEN" \
+  https://xynergy-intelligence-gateway-835612502919.us-central1.run.app/api/v2/crm/statistics
+
+# Test CRM contacts
+curl -H "Authorization: Bearer $JWT_TOKEN" \
+  https://xynergy-intelligence-gateway-835612502919.us-central1.run.app/api/v2/crm/contacts
+
+# Test Slack channels (mock data until OAuth configured)
+curl -H "Authorization: Bearer $JWT_TOKEN" \
+  https://xynergy-intelligence-gateway-835612502919.us-central1.run.app/api/v2/slack/channels
+```
+
+### Intelligence Services URLs
+```bash
+# Gateway (main entry point)
+GATEWAY="https://xynergy-intelligence-gateway-835612502919.us-central1.run.app"
+
+# Intelligence services (through gateway)
+SLACK="$GATEWAY/api/v2/slack"
+GMAIL="$GATEWAY/api/v2/gmail"
+CRM="$GATEWAY/api/v2/crm"
+AI="$GATEWAY/api/v1/ai"
+
+# Individual services (direct access if needed)
+SLACK_SERVICE="https://slack-intelligence-service-835612502919.us-central1.run.app"
+GMAIL_SERVICE="https://gmail-intelligence-service-835612502919.us-central1.run.app"
+CRM_SERVICE="https://crm-engine-vgjxy554mq-uc.a.run.app"
+RESEARCH="https://research-coordinator-835612502919.us-central1.run.app"
+```
+
+---
+
+## 🔐 Secrets Management (NEW)
+
+### View All Secrets
+```bash
+gcloud secrets list --project=xynergy-dev-1757909467
+```
+
+### Add Slack OAuth Secrets
+```bash
+# After collecting from Slack App configuration
+echo -n "xoxb-YOUR-TOKEN" | gcloud secrets create SLACK_BOT_TOKEN --data-file=-
+echo -n "YOUR_CLIENT_ID" | gcloud secrets create SLACK_CLIENT_ID --data-file=-
+echo -n "YOUR_CLIENT_SECRET" | gcloud secrets create SLACK_CLIENT_SECRET --data-file=-
+echo -n "YOUR_SIGNING_SECRET" | gcloud secrets create SLACK_SIGNING_SECRET --data-file=-
+
+# Grant access
+for secret in SLACK_BOT_TOKEN SLACK_CLIENT_ID SLACK_CLIENT_SECRET SLACK_SIGNING_SECRET; do
+  gcloud secrets add-iam-policy-binding $secret \
+    --member="serviceAccount:835612502919-compute@developer.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+done
+
+# Update service
+gcloud run services update slack-intelligence-service \
+  --region us-central1 \
+  --update-secrets=SLACK_BOT_TOKEN=SLACK_BOT_TOKEN:latest \
+  --update-secrets=SLACK_CLIENT_ID=SLACK_CLIENT_ID:latest \
+  --update-secrets=SLACK_CLIENT_SECRET=SLACK_CLIENT_SECRET:latest \
+  --update-secrets=SLACK_SIGNING_SECRET=SLACK_SIGNING_SECRET:latest
+```
+
+### Add Gmail OAuth Secrets
+```bash
+# After collecting from Google Cloud Console
+echo -n "YOUR_GMAIL_CLIENT_ID" | gcloud secrets create GMAIL_CLIENT_ID --data-file=-
+echo -n "YOUR_GMAIL_CLIENT_SECRET" | gcloud secrets create GMAIL_CLIENT_SECRET --data-file=-
+
+# Grant access and update service
+for secret in GMAIL_CLIENT_ID GMAIL_CLIENT_SECRET; do
+  gcloud secrets add-iam-policy-binding $secret \
+    --member="serviceAccount:835612502919-compute@developer.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+done
+
+gcloud run services update gmail-intelligence-service \
+  --region us-central1 \
+  --update-secrets=GMAIL_CLIENT_ID=GMAIL_CLIENT_ID:latest \
+  --update-secrets=GMAIL_CLIENT_SECRET=GMAIL_CLIENT_SECRET:latest
+```
+
+### View Secret Value (for debugging)
+```bash
+gcloud secrets versions access latest --secret="JWT_SECRET"
+```
 
 ---
 

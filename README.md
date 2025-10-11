@@ -41,9 +41,22 @@ The Xynergy Platform is a comprehensive suite of 20+ specialized microservices t
 - `scheduler-automation-engine` - Task scheduling and automation
 - `qa-engine` - Quality assurance and testing
 
+### Intelligence Gateway Layer (TypeScript/Node.js)
+
+**Gateway**
+- `xynergyos-intelligence-gateway` - Central API gateway with dual auth (Firebase + JWT)
+  - Service mesh routing with circuit breakers
+  - Redis caching (85%+ hit rate)
+  - Rate limiting and CORS security
+  - WebSocket support for real-time events
+
+**Communication Intelligence Services**
+- `slack-intelligence-service` - Slack workspace integration (mock mode, OAuth-ready)
+- `gmail-intelligence-service` - Gmail email management (mock mode, OAuth-ready)
+- `crm-engine` - Contact relationship management (Firestore-backed, fully operational)
+
 ### Supporting Services
 
-- `xynergy-intelligence-gateway` - Public-facing API for ClearForge.ai
 - `tenant-onboarding-service` - Automated tenant onboarding
 - `research-coordinator` - Research task orchestration
 - `validation-coordinator` - Data validation pipeline
@@ -52,13 +65,22 @@ The Xynergy Platform is a comprehensive suite of 20+ specialized microservices t
 
 ## Technology Stack
 
+**Python Services (Original Platform)**
 - **Backend**: Python 3.11, FastAPI
+- **Deployment**: Cloud Run, Cloud Build
+
+**TypeScript Services (Intelligence Gateway)**
+- **Runtime**: Node.js 20, TypeScript 5.3
+- **Framework**: Express.js 4.18
+- **WebSocket**: Socket.io 4.6
+- **Authentication**: Firebase Admin SDK, JWT
+
+**Shared Infrastructure**
 - **Cloud Platform**: Google Cloud Platform (GCP)
 - **Infrastructure**: Terraform, Docker
 - **Data Storage**: Firestore, BigQuery, Cloud Storage
 - **Messaging**: Cloud Pub/Sub
-- **Caching**: Redis
-- **Deployment**: Cloud Run, Cloud Build
+- **Caching**: Redis (10.229.184.219 via VPC connector)
 
 ## Quick Start
 

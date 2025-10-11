@@ -20,6 +20,10 @@ import healthRoutes from './routes/health';
 import metricsRoutes from './routes/metrics';
 import slackRoutes from './routes/slack';
 import gmailRoutes from './routes/gmail';
+import crmRoutes from './routes/crm';
+import aiRoutes from './routes/ai';
+import marketingRoutes from './routes/marketing';
+import asoRoutes from './routes/aso';
 
 export class Server {
   private app: Application;
@@ -67,11 +71,24 @@ export class Server {
     this.app.use('/api/v1/metrics', metricsRoutes);
     this.app.use('/metrics', metricsRoutes);
 
-    // Phase 2A routes
+    // Intelligence Gateway routes (with path aliases for frontend compatibility)
+    // Original paths: /api/xynergyos/v2/*
     this.app.use('/api/xynergyos/v2/slack', slackRoutes);
     this.app.use('/api/xynergyos/v2/gmail', gmailRoutes);
-    // this.app.use('/api/xynergyos/v2/calendar', calendarRoutes);
-    // this.app.use('/api/xynergyos/v2/crm', crmRoutes);
+    this.app.use('/api/xynergyos/v2/crm', crmRoutes);
+    // this.app.use('/api/xynergyos/v2/calendar', calendarRoutes); // TODO: Create calendar service
+
+    // Path aliases for frontend: /api/v2/*
+    this.app.use('/api/v2/slack', slackRoutes);
+    this.app.use('/api/v2/gmail', gmailRoutes);
+    this.app.use('/api/v2/email', gmailRoutes); // Frontend uses "email" instead of "gmail"
+    this.app.use('/api/v2/crm', crmRoutes);
+    // this.app.use('/api/v2/calendar', calendarRoutes); // TODO: Create calendar service
+
+    // Platform service routes (v1 API)
+    this.app.use('/api/v1/ai', aiRoutes);
+    this.app.use('/api/v1/marketing', marketingRoutes);
+    this.app.use('/api/v1/aso', asoRoutes);
 
     // 404 handler
     this.app.use((req, res) => {
