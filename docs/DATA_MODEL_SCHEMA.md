@@ -1,8 +1,8 @@
 # Data Model & Schema Documentation
 ## Xynergy Platform
 
-**Document Version:** 1.0
-**Last Updated:** October 10, 2025
+**Document Version:** 1.1
+**Last Updated:** October 11, 2025 (Added CRM Engine data model)
 
 ---
 
@@ -111,6 +111,139 @@ match /marketing_campaigns/{campaignId} {
   }
 }
 ```
+
+---
+
+### Collection: `tenants/{tenantId}/contacts` (CRM Engine)
+
+**Purpose:** Store customer/prospect contact information with tenant isolation
+
+**Schema:**
+```javascript
+{
+  id: string,                     // PK, UUID
+  tenantId: string,               // Partition key
+  type: string,                   // person, company
+  name: string,                   // Index
+  email: string,                  // Index, unique per tenant
+  phone: string,
+  company: string,
+  title: string,
+  relationshipType: string,       // customer, prospect, partner, vendor
+  status: string,                 // active, inactive, archived
+  tags: [string],
+  customFields: {
+    key: value
+  },
+  socialProfiles: {
+    linkedin: string,
+    twitter: string
+  },
+  source: string,                 // slack, gmail, manual, import
+  assignedTo: string,             // user ID
+  interactionCount: number,
+  emailCount: number,
+  slackMessageCount: number,
+  lastInteractionDate: timestamp,
+  createdAt: timestamp,           // Index
+  updatedAt: timestamp,
+  createdBy: string,
+  createdByEmail: string
+}
+```
+
+**Indexes:**
+- `tenantId` + `email` (unique)
+- `tenantId` + `createdAt` (DESC)
+- `tenantId` + `status` + `relationshipType`
+
+---
+
+### Collection: `tenants/{tenantId}/interactions` (CRM Engine)
+
+**Purpose:** Track all customer interactions across channels
+
+**Schema:**
+```javascript
+{
+  id: string,                     // PK, UUID
+  tenantId: string,
+  contactId: string,              // Index - FK to contacts
+  type: string,                   // email, slack_message, meeting, call, note
+  direction: string,              // inbound, outbound
+  subject: string,
+  content: string,
+  timestamp: timestamp,           // Index
+  metadata: {
+    emailId: string,              // If from Gmail
+    slackChannelId: string,       // If from Slack
+    slackMessageTs: string,
+    meetingDuration: number
+  },
+  participants: [string],         // Other contacts involved
+  attachments: [string],          // File references
+  createdAt: timestamp,
+  createdBy: string,
+  createdByEmail: string
+}
+```
+
+**Indexes:**
+- `tenantId` + `contactId` + `timestamp` (DESC)
+- `tenantId` + `type` + `timestamp` (DESC)
+
+---
+
+### Collection: `tenants/{tenantId}/notes` (CRM Engine)
+
+**Purpose:** User notes about contacts and interactions
+
+**Schema:**
+```javascript
+{
+  id: string,                     // PK, UUID
+  tenantId: string,
+  contactId: string,              // Index - FK to contacts
+  content: string,
+  tags: [string],
+  isPrivate: boolean,
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  createdBy: string,
+  createdByEmail: string
+}
+```
+
+---
+
+### Collection: `tenants/{tenantId}/tasks` (CRM Engine)
+
+**Purpose:** Track follow-up tasks related to contacts
+
+**Schema:**
+```javascript
+{
+  id: string,                     // PK, UUID
+  tenantId: string,
+  contactId: string,              // Index - FK to contacts
+  title: string,
+  description: string,
+  dueDate: timestamp,             // Index
+  priority: string,               // low, medium, high
+  status: string,                 // pending, completed, cancelled
+  assignedTo: string,
+  completedAt: timestamp,
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  createdBy: string,
+  createdByEmail: string
+}
+```
+
+**Indexes:**
+- `tenantId` + `contactId` + `status`
+- `tenantId` + `dueDate` + `status`
+- `tenantId` + `assignedTo` + `status`
 
 ---
 

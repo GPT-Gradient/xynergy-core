@@ -32,7 +32,8 @@ The Xynergy Platform is a cloud-native, microservices-based AI operations platfo
 
 ### Scope
 This document describes the technical design of the entire Xynergy Platform, including:
-- 44 microservices across multiple functional domains
+- 48 microservices across multiple functional domains (21 Python + 4 TypeScript + 23 specialized)
+- Intelligence Gateway with 4 communication intelligence services (Slack, Gmail, CRM, Gateway)
 - 21 shared infrastructure modules
 - Multi-tenant data architecture
 - AI routing and cost optimization systems
@@ -399,6 +400,67 @@ Health Checks → All Services → Aggregate Status → Dashboard
 - Error rates
 - Cache hit rates
 - Circuit breaker states
+
+#### 5. Intelligence Gateway (TypeScript)
+
+**Purpose:** Central API gateway for communication intelligence services
+
+**Architecture:**
+```
+External Clients
+        ↓
+Intelligence Gateway (TypeScript/Express.js)
+├── Firebase Authentication
+├── Rate Limiting (in-memory)
+├── Circuit Breaker Protection
+├── WebSocket Real-time Events
+├── Response Caching (Redis when available)
+└── Service Router
+    ├── /api/xynergyos/v2/slack/*   → Slack Intelligence Service
+    ├── /api/xynergyos/v2/gmail/*   → Gmail Intelligence Service
+    └── /api/xynergyos/v2/crm/*     → CRM Engine
+```
+
+**Technology Stack:**
+- TypeScript 5.3 + Node.js 20 Alpine
+- Express.js 4.18 web framework
+- Firebase Admin SDK for authentication
+- Redis for caching (optional - graceful degradation)
+- Socket.io for WebSocket real-time events
+
+**Key Features:**
+- **Mock Mode**: All intelligence services work without real API credentials for development
+- **Graceful Degradation**: Gateway operational without Redis (caching disabled)
+- **Circuit Breakers**: 5 failures → open circuit, protects against cascading failures
+- **Response Caching**: 1-5 minute TTL when Redis available
+- **WebSocket Events**: Real-time notifications for Slack messages, emails sent
+- **Tenant Isolation**: All CRM data segregated by tenant ID
+
+**Intelligence Services:**
+
+**5a. Slack Intelligence Service**
+- **URL**: `https://slack-intelligence-service-835612502919.us-central1.run.app`
+- **Features**: Channel management, messaging, user lookup, search
+- **Status**: Mock mode (works without Slack credentials)
+- **API**: 9 endpoints (channels, messages, users, search, status)
+
+**5b. Gmail Intelligence Service**
+- **URL**: `https://gmail-intelligence-service-835612502919.us-central1.run.app`
+- **Features**: Email list/read/send, search, thread management
+- **Status**: Mock mode (OAuth ready for production)
+- **API**: 6 endpoints (messages, search, threads, send, status)
+
+**5c. CRM Engine**
+- **URL**: `https://crm-engine-vgjxy554mq-uc.a.run.app`
+- **Features**: Contact CRUD, interaction tracking, notes, tasks, statistics
+- **Database**: Firestore tenant-isolated collections
+- **Integration**: Ready for auto-contact creation from Slack/Gmail
+
+**Performance Characteristics:**
+- Cache hit rate: N/A (Redis not configured - degraded mode)
+- Average latency: 100-300ms (no caching)
+- Availability: 99.9% target
+- Auto-scaling: 0-10 instances per service
 
 ---
 
@@ -1102,16 +1164,27 @@ Delete Revision A after 24 hours
 ## Technology Stack
 
 ### Programming Languages
-- **Python 3.11**: All services
+- **Python 3.11**: Core platform services (21 services)
+- **TypeScript 5.3**: Intelligence Gateway services (4 services)
 - **SQL**: BigQuery queries
 - **HCL**: Terraform infrastructure
 
 ### Frameworks & Libraries
+
+**Python Services:**
 - **FastAPI**: Web framework
 - **Pydantic**: Data validation
 - **uvicorn**: ASGI server
 - **structlog**: Structured logging
 - **aiohttp**: Async HTTP client
+
+**TypeScript Services:**
+- **Express.js 4.18**: Web framework
+- **Node.js 20**: Runtime environment
+- **Firebase Admin SDK 12.0**: Authentication
+- **Socket.io**: WebSocket real-time communication
+- **Winston**: Structured logging
+- **Redis Client**: Caching (optional)
 
 ### Google Cloud Platform
 - **Cloud Run**: Serverless compute
@@ -1174,10 +1247,14 @@ Delete Revision A after 24 hours
 ---
 
 **Document Control:**
-- **Version**: 1.0
-- **Last Updated**: October 10, 2025
-- **Next Review**: January 10, 2026
+- **Version**: 1.1
+- **Last Updated**: October 11, 2025 (Added Intelligence Gateway services)
+- **Next Review**: January 11, 2026
 - **Owner**: Platform Engineering Team
 - **Approvers**: CTO, Lead Architect
+
+**Changelog:**
+- **v1.1** (Oct 11, 2025): Added Intelligence Gateway (TypeScript) with Slack, Gmail, and CRM services
+- **v1.0** (Oct 10, 2025): Initial document
 
 **End of Technical Design Document**

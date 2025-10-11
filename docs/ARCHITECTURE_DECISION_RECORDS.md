@@ -20,6 +20,7 @@
 10. [ADR-010: BigQuery Partition Pruning](#adr-010-bigquery-partition-pruning)
 11. [ADR-011: Connection Pooling Strategy](#adr-011-connection-pooling-strategy)
 12. [ADR-012: Token Optimization for AI](#adr-012-token-optimization-for-ai)
+13. [ADR-013: TypeScript for Intelligence Gateway Services](#adr-013-typescript-for-intelligence-gateway-services)
 
 ---
 
@@ -941,10 +942,146 @@ def optimize_tokens(prompt: str, default: int) -> int:
 
 ---
 
+## ADR-013: TypeScript for Intelligence Gateway Services
+
+**Status:** Accepted
+**Date:** October 2025 (Week 1-8)
+**Deciders:** Platform Team, Architecture Team
+
+### Context
+
+The platform requires communication intelligence services (Slack, Gmail, CRM) with:
+- Real-time WebSocket communication
+- OAuth integration flows
+- Rich client libraries (Slack Web API, Google APIs)
+- Rapid prototyping and development
+- Mock mode for development without credentials
+
+### Decision
+
+Use **TypeScript + Node.js** for Intelligence Gateway services instead of Python/FastAPI.
+
+**Services Affected:**
+- XynergyOS Intelligence Gateway (central router)
+- Slack Intelligence Service
+- Gmail Intelligence Service
+- CRM Engine
+
+### Rationale
+
+**TypeScript Advantages:**
+1. **Rich Ecosystem**: Mature libraries for Slack (@slack/web-api) and Gmail (googleapis)
+2. **WebSocket Native**: Socket.io provides excellent real-time communication
+3. **Type Safety**: TypeScript provides strong typing similar to Python's type hints
+4. **Performance**: Node.js event loop excellent for I/O-bound communication tasks
+5. **Developer Experience**: npm ecosystem, hot reload (tsx), familiar patterns
+
+**Implementation Strategy:**
+```
+Python Services (21)          TypeScript Services (4)
+FastAPI + uvicorn            Express.js + Node.js 20
+Pydantic validation          TypeScript interfaces
+Redis caching                Redis caching (optional)
+Circuit breakers             Circuit breakers
+Firestore                    Firestore
+```
+
+### Consequences
+
+**Positive:**
+- ✅ Fast development with excellent client libraries
+- ✅ Mock mode pattern allows development without real API credentials
+- ✅ WebSocket support out-of-the-box with Socket.io
+- ✅ TypeScript provides strong typing and IDE support
+- ✅ Large talent pool for TypeScript developers
+
+**Negative:**
+- ❌ Introduces second language/ecosystem to platform
+- ❌ Separate deployment pipeline for TypeScript services
+- ❌ Different monitoring/logging patterns (Winston vs structlog)
+- ❌ Team needs to maintain expertise in both Python and TypeScript
+
+**Mitigations:**
+1. **Consistent Patterns**: Both use similar architectural patterns (circuit breakers, caching)
+2. **Shared Infrastructure**: Both deploy to Cloud Run, use Firestore, Firebase Auth
+3. **Standard Interfaces**: RESTful APIs with same authentication mechanism
+4. **Documentation**: Comprehensive docs for both Python and TypeScript services
+
+### Implementation Details
+
+**Architecture:**
+```
+Intelligence Gateway (Express.js)
+├── Firebase Authentication (same as Python)
+├── Rate Limiting (in-memory, similar to Python Redis)
+├── Circuit Breaker (TypeScript implementation)
+├── Service Router (proxy to backend services)
+└── WebSocket (Socket.io for real-time events)
+```
+
+**Development Workflow:**
+```bash
+# Development
+npm install
+npm run dev  # Hot reload with tsx
+
+# Production
+npm run build  # TypeScript → JavaScript
+docker build  # Multi-stage build
+gcloud run deploy  # Same as Python services
+```
+
+### Alternatives Considered
+
+**1. Python + FastAPI for Everything**
+- Rejected: Slack/Gmail libraries less mature in Python
+- Rejected: WebSocket support more complex in Python/FastAPI
+- Rejected: OAuth flows more documented in Node.js ecosystem
+
+**2. Go for Gateway Services**
+- Rejected: Smaller ecosystem for Slack/Gmail SDKs
+- Rejected: Longer development time
+- Rejected: Team less familiar with Go
+
+**3. Polyglot with Java/Spring**
+- Rejected: Too heavyweight for simple API services
+- Rejected: Longer cold start times on Cloud Run
+- Rejected: Team unfamiliar with Java ecosystem
+
+### Metrics & Validation
+
+**Success Criteria:**
+- ✅ Services deploy successfully to Cloud Run
+- ✅ Mock mode works without external API dependencies
+- ✅ Circuit breakers protect against failures
+- ✅ WebSocket real-time events functional
+- ✅ Firebase authentication consistent with Python services
+- ✅ Response times <500ms for gateway routing
+
+**Actual Results (Weeks 1-8):**
+- All 4 TypeScript services deployed successfully
+- Mock mode fully functional for development
+- Circuit breakers implemented with 5-failure threshold
+- WebSocket events working for Slack/Gmail notifications
+- Firebase auth working across all routes
+- Gateway routing: 100-300ms (degraded mode without Redis)
+
+### Related Decisions
+
+- **ADR-003** (FastAPI Framework): Remains valid for core platform services
+- **ADR-006** (Redis Caching): Applied to Gateway (graceful degradation when unavailable)
+- **ADR-009** (Circuit Breaker): Implemented in TypeScript using similar pattern
+
+---
+
 **Document Control:**
-- **Version**: 1.0
-- **Last Updated**: October 10, 2025
-- **Next Review**: January 10, 2026
+- **Version**: 1.1
+- **Last Updated**: October 11, 2025 (Added ADR-013 for TypeScript Intelligence Gateway)
+- **Next Review**: January 11, 2026
 - **Owner**: Architecture Team
+
+**Changelog:**
+- **v1.1** (Oct 11, 2025): Added ADR-013 for TypeScript Intelligence Gateway decision
+- **v1.0** (Oct 10, 2025): Initial document
 
 **End of Architecture Decision Records**
