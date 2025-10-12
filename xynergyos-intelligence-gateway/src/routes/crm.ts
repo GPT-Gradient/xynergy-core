@@ -70,139 +70,175 @@ router.post('/contacts',
 /**
  * GET /api/xynergyos/v2/crm/contacts/:contactId
  * Get a specific contact
+ * Permission: crm.read
  */
-router.get('/contacts/:contactId', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const { contactId } = req.params;
+router.get('/contacts/:contactId',
+  checkPermission('crm.read'),
+  asyncHandler(async (req: TenantRequest, res: Response) => {
+    const { contactId } = req.params;
 
-  logger.info('Fetching CRM contact by ID via gateway', {
-    contactId,
-    userId: req.user?.uid,
-    requestId: req.requestId,
-  });
+    logger.info('Fetching CRM contact by ID via gateway', {
+      contactId,
+      userId: req.user?.uid,
+      tenantId: req.tenantId,
+      requestId: req.requestId,
+    });
 
-  const result = await serviceRouter.callCRMService(`/api/v1/crm/contacts/${contactId}`, {
-    method: 'GET',
-    headers: {
-      Authorization: req.headers.authorization!,
-    },
-    cache: true,
-    cacheTtl: 60,
-  } as any);
+    const result = await serviceRouter.callCRMService(`/api/v1/crm/contacts/${contactId}`, {
+      method: 'GET',
+      headers: {
+        Authorization: req.headers.authorization!,
+        'X-Tenant-Id': req.tenantId,
+      },
+      cache: true,
+      cacheTtl: 60,
+    } as any);
 
-  res.json(result);
-}));
+    res.json(result);
+  })
+);
 
 /**
  * PATCH /api/xynergyos/v2/crm/contacts/:contactId
  * Update a contact
+ * Permission: crm.write or crm.update
  */
-router.patch('/contacts/:contactId', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const { contactId } = req.params;
+router.patch('/contacts/:contactId',
+  checkPermission(['crm.write', 'crm.update']),
+  asyncHandler(async (req: TenantRequest, res: Response) => {
+    const { contactId } = req.params;
 
-  logger.info('Updating CRM contact via gateway', {
-    contactId,
-    userId: req.user?.uid,
-    requestId: req.requestId,
-  });
+    logger.info('Updating CRM contact via gateway', {
+      contactId,
+      userId: req.user?.uid,
+      tenantId: req.tenantId,
+      requestId: req.requestId,
+    });
 
-  const result = await serviceRouter.callCRMService(`/api/v1/crm/contacts/${contactId}`, {
-    method: 'PATCH',
-    headers: {
-      Authorization: req.headers.authorization!,
-    },
-    data: req.body,
-  });
+    const result = await serviceRouter.callCRMService(`/api/v1/crm/contacts/${contactId}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: req.headers.authorization!,
+        'X-Tenant-Id': req.tenantId,
+      },
+      data: req.body,
+    });
 
-  res.json(result);
-}));
+    res.json(result);
+  })
+);
 
 /**
  * DELETE /api/xynergyos/v2/crm/contacts/:contactId
  * Delete a contact
+ * Permission: crm.delete
  */
-router.delete('/contacts/:contactId', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const { contactId } = req.params;
+router.delete('/contacts/:contactId',
+  checkPermission('crm.delete'),
+  asyncHandler(async (req: TenantRequest, res: Response) => {
+    const { contactId } = req.params;
 
-  logger.info('Deleting CRM contact via gateway', {
-    contactId,
-    userId: req.user?.uid,
-    requestId: req.requestId,
-  });
+    logger.info('Deleting CRM contact via gateway', {
+      contactId,
+      userId: req.user?.uid,
+      tenantId: req.tenantId,
+      requestId: req.requestId,
+    });
 
-  await serviceRouter.callCRMService(`/api/v1/crm/contacts/${contactId}`, {
-    method: 'DELETE',
-    headers: {
-      Authorization: req.headers.authorization!,
-    },
-  });
+    await serviceRouter.callCRMService(`/api/v1/crm/contacts/${contactId}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: req.headers.authorization!,
+        'X-Tenant-Id': req.tenantId,
+      },
+    });
 
-  res.status(204).send();
-}));
+    res.status(204).send();
+  })
+);
 
 /**
  * GET /api/xynergyos/v2/crm/contacts/:contactId/interactions
  * Get contact interactions
+ * Permission: crm.read
  */
-router.get('/contacts/:contactId/interactions', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const { contactId } = req.params;
+router.get('/contacts/:contactId/interactions',
+  checkPermission('crm.read'),
+  asyncHandler(async (req: TenantRequest, res: Response) => {
+    const { contactId } = req.params;
 
-  logger.info('Fetching CRM contact interactions via gateway', {
-    contactId,
-    userId: req.user?.uid,
-    requestId: req.requestId,
-  });
+    logger.info('Fetching CRM contact interactions via gateway', {
+      contactId,
+      userId: req.user?.uid,
+      tenantId: req.tenantId,
+      requestId: req.requestId,
+    });
 
-  const result = await serviceRouter.callCRMService(`/api/v1/crm/contacts/${contactId}/interactions`, {
-    method: 'GET',
-    headers: {
-      Authorization: req.headers.authorization!,
-    },
-  });
+    const result = await serviceRouter.callCRMService(`/api/v1/crm/contacts/${contactId}/interactions`, {
+      method: 'GET',
+      headers: {
+        Authorization: req.headers.authorization!,
+        'X-Tenant-Id': req.tenantId,
+      },
+    });
 
-  res.json(result);
-}));
+    res.json(result);
+  })
+);
 
 /**
  * POST /api/xynergyos/v2/crm/interactions
  * Log a new interaction
+ * Permission: crm.write
  */
-router.post('/interactions', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  logger.info('Logging CRM interaction via gateway', {
-    userId: req.user?.uid,
-    requestId: req.requestId,
-  });
+router.post('/interactions',
+  checkPermission('crm.write'),
+  asyncHandler(async (req: TenantRequest, res: Response) => {
+    logger.info('Logging CRM interaction via gateway', {
+      userId: req.user?.uid,
+      tenantId: req.tenantId,
+      requestId: req.requestId,
+    });
 
-  const result = await serviceRouter.callCRMService('/api/v1/crm/interactions', {
-    method: 'POST',
-    headers: {
-      Authorization: req.headers.authorization!,
-    },
-    data: req.body,
-  });
+    const result = await serviceRouter.callCRMService('/api/v1/crm/interactions', {
+      method: 'POST',
+      headers: {
+        Authorization: req.headers.authorization!,
+        'X-Tenant-Id': req.tenantId,
+      },
+      data: req.body,
+    });
 
-  res.status(201).json(result);
-}));
+    res.status(201).json(result);
+  })
+);
 
 /**
  * GET /api/xynergyos/v2/crm/statistics
  * Get CRM statistics
+ * Permission: crm.read
  */
-router.get('/statistics', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  logger.info('Fetching CRM statistics via gateway', {
-    userId: req.user?.uid,
-    requestId: req.requestId,
-  });
+router.get('/statistics',
+  checkPermission('crm.read'),
+  asyncHandler(async (req: TenantRequest, res: Response) => {
+    logger.info('Fetching CRM statistics via gateway', {
+      userId: req.user?.uid,
+      tenantId: req.tenantId,
+      requestId: req.requestId,
+    });
 
-  const result = await serviceRouter.callCRMService('/api/v1/crm/statistics', {
-    method: 'GET',
-    headers: {
-      Authorization: req.headers.authorization!,
-    },
-    cache: true,
-    cacheTtl: 300, // Cache for 5 minutes
-  } as any);
+    const result = await serviceRouter.callCRMService('/api/v1/crm/statistics', {
+      method: 'GET',
+      headers: {
+        Authorization: req.headers.authorization!,
+        'X-Tenant-Id': req.tenantId,
+      },
+      cache: true,
+      cacheTtl: 300, // Cache for 5 minutes
+    } as any);
 
-  res.json(result);
-}));
+    res.json(result);
+  })
+);
 
 export default router;

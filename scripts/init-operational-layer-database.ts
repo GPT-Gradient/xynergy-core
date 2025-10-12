@@ -9,14 +9,8 @@
 import * as admin from 'firebase-admin';
 
 // Initialize Firebase Admin
-if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-  admin.initializeApp();
-} else {
-  const serviceAccount = require('../serviceAccountKey.json');
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-}
+// Use application default credentials (works with gcloud auth)
+admin.initializeApp();
 
 const db = admin.firestore();
 

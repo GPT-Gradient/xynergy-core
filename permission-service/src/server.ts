@@ -19,8 +19,8 @@ const PORT = process.env.PORT || 8080;
 
 // Initialize Firebase Admin
 try {
-  // Check if running in GCP (will use default credentials)
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GCLOUD_PROJECT) {
+  // Check if running in production (Cloud Run sets NODE_ENV=production)
+  if (process.env.NODE_ENV === 'production') {
     initializeApp();
     logger.info('Firebase initialized with default credentials');
   } else {
