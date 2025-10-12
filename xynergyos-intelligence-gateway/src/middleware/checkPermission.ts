@@ -158,29 +158,13 @@ async function auditPermissionCheck(
 /**
  * Invalidate permission cache for user
  * Call this after role/permission changes
+ * (No-op without cache - permissions fetched fresh each time)
  */
 export async function invalidatePermissionCache(
   userId: string,
   tenantId?: string
 ): Promise<void> {
-  try {
-    const cache = getCacheService();
-
-    if (tenantId) {
-      // Invalidate specific tenant
-      const cacheKey = `permissions:${userId}:${tenantId}`;
-      await cache.del(cacheKey);
-      logger.info('Invalidated permission cache', { userId, tenantId });
-    } else {
-      // Invalidate all tenants for user
-      // This requires scanning cache keys or maintaining a set
-      // For now, we'll just log it
-      logger.info('Permission cache invalidation requested for all tenants', { userId });
-      // TODO: Implement cache key scanning or maintain tenant list per user
-    }
-  } catch (error) {
-    logger.error('Error invalidating permission cache', { userId, tenantId, error });
-  }
+  logger.info('Permission cache invalidation requested (no-op without cache)', { userId, tenantId });
 }
 
 /**
@@ -219,7 +203,7 @@ export async function invalidatePermissionCache(
 export function checkPermission(
   permissions: string | string[],
   options: PermissionCheckOptions = {}
-) {
+): any {
   const requiredPermissions = Array.isArray(permissions) ? permissions : [permissions];
   const { requireAll = false, skipAudit = false } = options;
 
