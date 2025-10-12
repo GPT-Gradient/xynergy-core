@@ -7,7 +7,6 @@ import { Response, NextFunction } from 'express';
 import { TenantRequest } from './tenantEnforcement';
 import { logger } from '../utils/logger';
 import { getFirestore } from 'firebase-admin/firestore';
-import { getCacheService } from '../services/cache';
 
 interface PermissionCheckOptions {
   requireAll?: boolean; // Require all permissions (AND) vs any permission (OR)
@@ -45,23 +44,11 @@ function permissionMatches(required: string, userPermission: string): boolean {
 }
 
 /**
- * Get user permissions for tenant (with Redis caching)
+ * Get user permissions for tenant (direct Firestore lookup)
  */
 async function getUserPermissions(userId: string, tenantId: string): Promise<string[]> {
-  const cacheKey = `permissions:${userId}:${tenantId}`;
-
   try {
-    const cache = getCacheService();
-
-    // Try cache first
-    const cached = await cache.get(cacheKey);
-    if (cached) {
-      logger.debug('Permission cache hit', { userId, tenantId });
-      return JSON.parse(cached);
-    }
-
-    // Cache miss - fetch from Firestore
-    logger.debug('Permission cache miss', { userId, tenantId });
+    logger.debug('Fetching user permissions from Firestore', { userId, tenantId });
     const db = getFirestore();
     const userDoc = await db.collection('users').doc(userId).get();
 
@@ -79,9 +66,6 @@ async function getUserPermissions(userId: string, tenantId: string): Promise<str
     const permissions = Array.isArray(tenantRole.permissions)
       ? tenantRole.permissions
       : [];
-
-    // Cache for 5 minutes
-    await cache.set(cacheKey, JSON.stringify(permissions), 300);
 
     return permissions;
   } catch (error) {
