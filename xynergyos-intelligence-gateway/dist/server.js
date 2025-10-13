@@ -22,12 +22,22 @@ const rateLimit_1 = require("./middleware/rateLimit");
 // Import routes
 const health_1 = __importDefault(require("./routes/health"));
 const metrics_1 = __importDefault(require("./routes/metrics"));
+const auth_1 = __importDefault(require("./routes/auth"));
+const profile_1 = __importDefault(require("./routes/profile"));
+const oauth_1 = __importDefault(require("./routes/oauth"));
+const integrations_1 = __importDefault(require("./routes/integrations"));
 const slack_1 = __importDefault(require("./routes/slack"));
 const gmail_1 = __importDefault(require("./routes/gmail"));
 const crm_1 = __importDefault(require("./routes/crm"));
 const ai_1 = __importDefault(require("./routes/ai"));
 const marketing_1 = __importDefault(require("./routes/marketing"));
 const aso_1 = __importDefault(require("./routes/aso"));
+const memory_1 = __importDefault(require("./routes/memory"));
+const research_1 = __importDefault(require("./routes/research"));
+const calendar_1 = __importDefault(require("./routes/calendar"));
+const intelligence_1 = __importDefault(require("./routes/intelligence"));
+const admin_1 = __importDefault(require("./routes/admin"));
+const projects_1 = __importDefault(require("./routes/projects"));
 class Server {
     app;
     httpServer;
@@ -62,6 +72,13 @@ class Server {
         // Metrics and monitoring
         this.app.use('/api/v1/metrics', metrics_1.default);
         this.app.use('/metrics', metrics_1.default);
+        // Authentication (no auth middleware - these endpoints create tokens)
+        this.app.use('/api/v1/auth', auth_1.default);
+        // User Profile (authenticated)
+        this.app.use('/api/v1/profile', profile_1.default);
+        // OAuth and Integrations Management (authenticated)
+        this.app.use('/api/v1/oauth', oauth_1.default);
+        this.app.use('/api/v1/integrations', integrations_1.default);
         // Intelligence Gateway routes (with path aliases for frontend compatibility)
         // Original paths: /api/xynergyos/v2/*
         this.app.use('/api/xynergyos/v2/slack', slack_1.default);
@@ -73,11 +90,17 @@ class Server {
         this.app.use('/api/v2/gmail', gmail_1.default);
         this.app.use('/api/v2/email', gmail_1.default); // Frontend uses "email" instead of "gmail"
         this.app.use('/api/v2/crm', crm_1.default);
-        // this.app.use('/api/v2/calendar', calendarRoutes); // TODO: Create calendar service
+        this.app.use('/api/v2/calendar', calendar_1.default);
         // Platform service routes (v1 API)
         this.app.use('/api/v1/ai', ai_1.default);
         this.app.use('/api/v1/marketing', marketing_1.default);
         this.app.use('/api/v1/aso', aso_1.default);
+        this.app.use('/api/v1/memory', memory_1.default);
+        this.app.use('/api/v1/research-sessions', research_1.default);
+        this.app.use('/api/v1/intelligence', intelligence_1.default);
+        // Admin and Projects routes (authenticated)
+        this.app.use('/api/v1/admin', admin_1.default);
+        this.app.use('/api/v1/projects', projects_1.default);
         // 404 handler
         this.app.use((req, res) => {
             res.status(404).json({

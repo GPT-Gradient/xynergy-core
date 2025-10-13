@@ -15,12 +15,14 @@ router.use(authenticateRequest);
  * List all channels in the workspace
  */
 router.get('/channels', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.uid;
+
   logger.info('Fetching Slack channels', {
-    userId: req.user?.uid,
+    userId,
     requestId: req.requestId,
   });
 
-  const channels = await slackService.listChannels();
+  const channels = await slackService.listChannels(userId);
 
   res.json({
     success: true,
@@ -38,6 +40,7 @@ router.get('/channels', asyncHandler(async (req: AuthenticatedRequest, res: Resp
  * Get messages from a specific channel
  */
 router.get('/channels/:channelId/messages', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.uid;
   const { channelId } = req.params;
   const limit = parseInt(req.query.limit as string) || 20;
 
@@ -48,11 +51,11 @@ router.get('/channels/:channelId/messages', asyncHandler(async (req: Authenticat
   logger.info('Fetching channel messages', {
     channelId,
     limit,
-    userId: req.user?.uid,
+    userId,
     requestId: req.requestId,
   });
 
-  const messages = await slackService.getChannelHistory(channelId, limit);
+  const messages = await slackService.getChannelHistory(userId, channelId, limit);
 
   res.json({
     success: true,
@@ -71,6 +74,7 @@ router.get('/channels/:channelId/messages', asyncHandler(async (req: Authenticat
  * Post a message to a channel
  */
 router.post('/channels/:channelId/messages', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.uid;
   const { channelId } = req.params;
   const { text, blocks } = req.body;
 
@@ -80,11 +84,11 @@ router.post('/channels/:channelId/messages', asyncHandler(async (req: Authentica
 
   logger.info('Posting message to Slack channel', {
     channelId,
-    userId: req.user?.uid,
+    userId,
     requestId: req.requestId,
   });
 
-  const result = await slackService.postMessage(channelId, text, blocks);
+  const result = await slackService.postMessage(userId, channelId, text, blocks);
 
   res.json({
     success: true,
@@ -102,12 +106,14 @@ router.post('/channels/:channelId/messages', asyncHandler(async (req: Authentica
  * List all users in the workspace
  */
 router.get('/users', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.uid;
+
   logger.info('Fetching Slack users', {
-    userId: req.user?.uid,
+    userId,
     requestId: req.requestId,
   });
 
-  const users = await slackService.listUsers();
+  const users = await slackService.listUsers(userId);
 
   res.json({
     success: true,
@@ -124,16 +130,17 @@ router.get('/users', asyncHandler(async (req: AuthenticatedRequest, res: Respons
  * GET /api/v1/slack/users/:userId
  * Get info about a specific user
  */
-router.get('/users/:userId', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const { userId } = req.params;
+router.get('/users/:slackUserId', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.uid;
+  const { slackUserId } = req.params;
 
   logger.info('Fetching Slack user info', {
-    targetUserId: userId,
-    userId: req.user?.uid,
+    slackUserId,
+    userId,
     requestId: req.requestId,
   });
 
-  const user = await slackService.getUserInfo(userId);
+  const user = await slackService.getUserInfo(userId, slackUserId);
 
   res.json({
     success: true,
@@ -150,6 +157,7 @@ router.get('/users/:userId', asyncHandler(async (req: AuthenticatedRequest, res:
  * Search messages in the workspace
  */
 router.get('/search', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.uid;
   const query = req.query.q as string;
   const count = parseInt(req.query.count as string) || 20;
 
@@ -164,11 +172,11 @@ router.get('/search', asyncHandler(async (req: AuthenticatedRequest, res: Respon
   logger.info('Searching Slack messages', {
     query,
     count,
-    userId: req.user?.uid,
+    userId,
     requestId: req.requestId,
   });
 
-  const results = await slackService.searchMessages(query, count);
+  const results = await slackService.searchMessages(userId, query, count);
 
   res.json({
     success: true,
@@ -186,7 +194,8 @@ router.get('/search', asyncHandler(async (req: AuthenticatedRequest, res: Respon
  * Get Slack connection status
  */
 router.get('/status', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const status = await slackService.testConnection();
+  const userId = req.user!.uid;
+  const status = await slackService.testConnection(userId);
 
   res.json({
     success: true,

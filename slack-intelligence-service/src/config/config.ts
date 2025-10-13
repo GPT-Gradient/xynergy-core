@@ -55,9 +55,12 @@ export const appConfig: Config = {
   gcpRegion: process.env.GCP_REGION || 'us-central1',
 
   slack: {
+    // DEPRECATED: botToken is no longer used (Phase 3). Services now use per-user OAuth tokens from Firestore.
+    // This remains for backward compatibility but is not accessed by the service.
     botToken: process.env.SLACK_BOT_TOKEN,
     signingSecret: process.env.SLACK_SIGNING_SECRET,
     appToken: process.env.SLACK_APP_TOKEN,
+    // OAuth credentials for app-level authentication (used to initiate OAuth flows)
     clientId: process.env.SLACK_CLIENT_ID,
     clientSecret: process.env.SLACK_CLIENT_SECRET,
   },

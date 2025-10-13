@@ -4,6 +4,11 @@ export interface Config {
     serviceName: string;
     gcpProjectId: string;
     gcpRegion: string;
+    gmail: {
+        clientId?: string;
+        clientSecret?: string;
+        redirectUri: string;
+    };
     firebase: {
         projectId: string;
         serviceAccountPath?: string;
@@ -21,7 +26,7 @@ export interface Config {
         origins: string[];
     };
     pubsub: {
-        crmEventsTopic: string;
+        gmailEventsTopic: string;
     };
 }
 export declare const appConfig: Config;

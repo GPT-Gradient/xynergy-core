@@ -1,0 +1,227 @@
+# Cloud Build configuration for PLATFORM-WIDE DEV deployments
+# Triggered on push to main branch
+#
+# This builds and deploys ALL platform services to dev environment
+# Use with caution - typically you'll deploy individual services
+
+steps:
+  # ============================================
+  # Build Intelligence Gateway Services (TypeScript)
+  # ============================================
+
+  - name: 'node:20'
+    id: 'build-gateway'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        echo "Building Intelligence Gateway..."
+        cd xynergyos-intelligence-gateway
+        npm ci
+        npm run build
+    waitFor: ['-']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-gateway'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/xynergy-services/xynergyos-intelligence-gateway:dev'
+      - '.'
+    dir: 'xynergyos-intelligence-gateway'
+    waitFor: ['build-gateway']
+
+  - name: 'node:20'
+    id: 'build-slack'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        echo "Building Slack Intelligence Service..."
+        cd slack-intelligence-service
+        npm ci
+        npm run build
+    waitFor: ['-']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-slack'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/xynergy-services/slack-intelligence-service:dev'
+      - '.'
+    dir: 'slack-intelligence-service'
+    waitFor: ['build-slack']
+
+  - name: 'node:20'
+    id: 'build-gmail'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        echo "Building Gmail Intelligence Service..."
+        cd gmail-intelligence-service
+        npm ci
+        npm run build
+    waitFor: ['-']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-gmail'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/xynergy-services/gmail-intelligence-service:dev'
+      - '.'
+    dir: 'gmail-intelligence-service'
+    waitFor: ['build-gmail']
+
+  - name: 'node:20'
+    id: 'build-crm'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        echo "Building CRM Engine..."
+        cd crm-engine
+        npm ci
+        npm run build
+    waitFor: ['-']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-crm'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/xynergy-services/crm-engine:dev'
+      - '.'
+    dir: 'crm-engine'
+    waitFor: ['build-crm']
+
+  # ============================================
+  # Push All Images
+  # ============================================
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-images'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/xynergy-services/'
+    waitFor: ['docker-gateway', 'docker-slack', 'docker-gmail', 'docker-crm']
+
+  # ============================================
+  # Deploy Services
+  # ============================================
+
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'deploy-gateway'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'xynergyos-intelligence-gateway'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/xynergy-services/xynergyos-intelligence-gateway:dev'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars=NODE_ENV=production,XYNERGY_ENV=dev,MOCK_MODE=true'
+      - '--set-secrets=JWT_SECRET=jwt-secret-dev:latest'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--vpc-connector=redis-connector'
+      - '--vpc-egress=private-ranges-only'
+    waitFor: ['push-images']
+
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'deploy-slack'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'slack-intelligence-service'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/xynergy-services/slack-intelligence-service:dev'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars=NODE_ENV=production,XYNERGY_ENV=dev,MOCK_MODE=true'
+      - '--set-secrets=JWT_SECRET=jwt-secret-dev:latest'
+      - '--memory=256Mi'
+      - '--cpu=1'
+      - '--min-instances=0'
+      - '--max-instances=10'
+    waitFor: ['deploy-gateway']
+
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'deploy-gmail'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'gmail-intelligence-service'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/xynergy-services/gmail-intelligence-service:dev'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars=NODE_ENV=production,XYNERGY_ENV=dev,MOCK_MODE=true'
+      - '--set-secrets=JWT_SECRET=jwt-secret-dev:latest'
+      - '--memory=256Mi'
+      - '--cpu=1'
+      - '--min-instances=0'
+      - '--max-instances=10'
+    waitFor: ['deploy-slack']
+
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'deploy-crm'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'crm-engine'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/xynergy-services/crm-engine:dev'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars=NODE_ENV=production,XYNERGY_ENV=dev'
+      - '--set-secrets=JWT_SECRET=jwt-secret-dev:latest'
+      - '--memory=256Mi'
+      - '--cpu=1'
+      - '--min-instances=0'
+      - '--max-instances=10'
+    waitFor: ['deploy-gmail']
+
+  # ============================================
+  # Deployment Summary
+  # ============================================
+
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'summary'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "========================================="
+        echo "✅ PLATFORM DEV DEPLOYMENT COMPLETE"
+        echo "========================================="
+        echo ""
+        echo "Services Deployed:"
+        echo "  - xynergyos-intelligence-gateway"
+        echo "  - slack-intelligence-service"
+        echo "  - gmail-intelligence-service"
+        echo "  - crm-engine"
+        echo ""
+        echo "Environment: DEV"
+        echo "Mock Mode: ENABLED"
+        echo ""
+        echo "Gateway URL:"
+        echo "  https://xynergyos-intelligence-gateway-835612502919.us-central1.run.app"
+        echo ""
+        echo "Check health:"
+        echo "  ./scripts/platform-health.sh -e dev"
+        echo "========================================="
+    waitFor: ['deploy-crm']
+
+# Build configuration
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+# Timeout (30 minutes for platform-wide build)
+timeout: '1800s'

@@ -15,17 +15,18 @@ router.use(authenticateRequest);
  * List messages in inbox
  */
 router.get('/messages', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.uid;
   const maxResults = parseInt(req.query.maxResults as string) || 20;
   const query = req.query.q as string;
 
   logger.info('Fetching Gmail messages', {
-    userId: req.user?.uid,
+    userId,
     maxResults,
     query,
     requestId: req.requestId,
   });
 
-  const messages = await gmailService.listMessages(maxResults, query);
+  const messages = await gmailService.listMessages(userId, maxResults, query);
 
   res.json({
     success: true,
@@ -43,15 +44,16 @@ router.get('/messages', asyncHandler(async (req: AuthenticatedRequest, res: Resp
  * Get message details
  */
 router.get('/messages/:messageId', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.uid;
   const { messageId } = req.params;
 
   logger.info('Fetching Gmail message', {
     messageId,
-    userId: req.user?.uid,
+    userId,
     requestId: req.requestId,
   });
 
-  const message = await gmailService.getMessage(messageId);
+  const message = await gmailService.getMessage(userId, messageId);
 
   res.json({
     success: true,
@@ -68,6 +70,7 @@ router.get('/messages/:messageId', asyncHandler(async (req: AuthenticatedRequest
  * Send email
  */
 router.post('/messages', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.uid;
   const { to, subject, body, cc, bcc } = req.body;
 
   if (!to || !subject || !body) {
@@ -77,11 +80,11 @@ router.post('/messages', asyncHandler(async (req: AuthenticatedRequest, res: Res
   logger.info('Sending Gmail message', {
     to,
     subject,
-    userId: req.user?.uid,
+    userId,
     requestId: req.requestId,
   });
 
-  const result = await gmailService.sendMessage(to, subject, body, cc, bcc);
+  const result = await gmailService.sendMessage(userId, to, subject, body, cc, bcc);
 
   res.json({
     success: true,
@@ -98,6 +101,7 @@ router.post('/messages', asyncHandler(async (req: AuthenticatedRequest, res: Res
  * Search messages
  */
 router.get('/search', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.uid;
   const query = req.query.q as string;
   const maxResults = parseInt(req.query.maxResults as string) || 20;
 
@@ -108,11 +112,11 @@ router.get('/search', asyncHandler(async (req: AuthenticatedRequest, res: Respon
   logger.info('Searching Gmail messages', {
     query,
     maxResults,
-    userId: req.user?.uid,
+    userId,
     requestId: req.requestId,
   });
 
-  const messages = await gmailService.searchMessages(query, maxResults);
+  const messages = await gmailService.searchMessages(userId, query, maxResults);
 
   res.json({
     success: true,
@@ -131,15 +135,16 @@ router.get('/search', asyncHandler(async (req: AuthenticatedRequest, res: Respon
  * Get email thread
  */
 router.get('/threads/:threadId', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.uid;
   const { threadId } = req.params;
 
   logger.info('Fetching Gmail thread', {
     threadId,
-    userId: req.user?.uid,
+    userId,
     requestId: req.requestId,
   });
 
-  const thread = await gmailService.getThread(threadId);
+  const thread = await gmailService.getThread(userId, threadId);
 
   res.json({
     success: true,
@@ -156,7 +161,8 @@ router.get('/threads/:threadId', asyncHandler(async (req: AuthenticatedRequest, 
  * Get Gmail connection status
  */
 router.get('/status', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const status = await gmailService.testConnection();
+  const userId = req.user!.uid;
+  const status = await gmailService.testConnection(userId);
 
   res.json({
     success: true,

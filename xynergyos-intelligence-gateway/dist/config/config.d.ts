@@ -13,6 +13,7 @@ interface Config {
         marketingEngine: string;
         asoEngine: string;
         researchCoordinator: string;
+        memoryService: string;
     };
     redis: {
         host: string;

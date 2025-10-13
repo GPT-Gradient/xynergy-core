@@ -85,7 +85,9 @@ export class CacheService {
     }
 
     try {
-      const value = await this.client.get(key);
+      // Add environment prefix to key
+      const prefixedKey = `${appConfig.redis.keyPrefix}${key}`;
+      const value = await this.client.get(prefixedKey);
 
       if (value) {
         this.cacheHits++;
@@ -115,7 +117,9 @@ export class CacheService {
       const ttl = options.ttl || 300; // Default 5 minutes
       const serialized = JSON.stringify(value);
 
-      await this.client.setEx(key, ttl, serialized);
+      // Add environment prefix to key
+      const prefixedKey = `${appConfig.redis.keyPrefix}${key}`;
+      await this.client.setEx(prefixedKey, ttl, serialized);
 
       // Store tags for invalidation
       if (options.tags && options.tags.length > 0) {

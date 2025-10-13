@@ -1,0 +1,810 @@
+# XynergyOS Platform Services Manifest
+# Defines all services and their deployment configurations
+
+version: "1.0"
+project_id: "xynergy-dev-1757909467"
+region: "us-central1"
+
+# Service groups for coordinated deployment
+service_groups:
+  core_infrastructure:
+    description: "Core platform services that other services depend on"
+    priority: 1
+    services:
+      - system-runtime
+      - security-governance
+      - tenant-management
+      - secrets-config
+      - permission-service
+
+  intelligence_gateway:
+    description: "Intelligence Gateway and communication services"
+    priority: 2
+    services:
+      - xynergyos-intelligence-gateway
+      - slack-intelligence-service
+      - gmail-intelligence-service
+      - calendar-intelligence-service
+      - crm-engine
+
+  ai_services:
+    description: "AI and ML services"
+    priority: 3
+    services:
+      - ai-routing-engine
+      - internal-ai-service-v2
+      - ai-assistant
+      - xynergy-competency-engine
+
+  data_analytics:
+    description: "Analytics and data processing services"
+    priority: 4
+    services:
+      - analytics-data-layer
+      - analytics-aggregation-service
+      - fact-checking-layer
+      - audit-logging-service
+
+  business_operations:
+    description: "Business and operational services"
+    priority: 5
+    services:
+      - marketing-engine
+      - content-hub
+      - project-management
+      - qa-engine
+      - scheduler-automation-engine
+      - aso-engine
+      - research-coordinator
+
+  user_services:
+    description: "User-facing services and dashboards"
+    priority: 6
+    services:
+      - platform-dashboard
+      - executive-dashboard
+      - conversational-interface-service
+      - oauth-management-service
+      - beta-program-service
+      - business-entity-service
+
+# Service definitions with deployment configurations
+services:
+  # ============================================
+  # Core Infrastructure Services
+  # ============================================
+
+  system-runtime:
+    type: python
+    path: ./system-runtime
+    description: "Core platform orchestration"
+    dev:
+      name: xynergy-system-runtime
+      memory: 512Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+        MOCK_MODE: "true"
+      secrets: {}
+    prod:
+      name: xynergy-system-runtime-prod
+      memory: 1Gi
+      cpu: 2
+      min_instances: 1
+      max_instances: 20
+      env_vars:
+        XYNERGY_ENV: prod
+        MOCK_MODE: "false"
+      secrets: {}
+
+  security-governance:
+    type: python
+    path: ./security-governance
+    description: "Security policies and compliance"
+    dev:
+      name: xynergy-security-governance
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 3
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-security-governance-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 10
+      env_vars:
+        XYNERGY_ENV: prod
+
+  tenant-management:
+    type: python
+    path: ./tenant-management
+    description: "Multi-tenant account management"
+    dev:
+      name: xynergy-tenant-management
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-tenant-management-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 15
+      env_vars:
+        XYNERGY_ENV: prod
+
+  secrets-config:
+    type: python
+    path: ./secrets-config
+    description: "Secrets and configuration management"
+    dev:
+      name: xynergy-secrets-config
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 3
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-secrets-config-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 10
+      env_vars:
+        XYNERGY_ENV: prod
+
+  permission-service:
+    type: typescript
+    path: ./permission-service
+    description: "Permission and access control"
+    dev:
+      name: permission-service
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+      secrets:
+        JWT_SECRET: jwt-secret-dev:latest
+    prod:
+      name: permission-service-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 15
+      env_vars:
+        XYNERGY_ENV: prod
+      secrets:
+        JWT_SECRET: jwt-secret-prod:latest
+
+  # ============================================
+  # Intelligence Gateway Services
+  # ============================================
+
+  xynergyos-intelligence-gateway:
+    type: typescript
+    path: ./xynergyos-intelligence-gateway
+    description: "Central API gateway with routing and caching"
+    dev:
+      name: xynergyos-intelligence-gateway
+      memory: 512Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 10
+      vpc_connector: redis-connector
+      vpc_egress: private-ranges-only
+      env_vars:
+        NODE_ENV: production
+        XYNERGY_ENV: dev
+        MOCK_MODE: "true"
+      secrets:
+        JWT_SECRET: jwt-secret-dev:latest
+    prod:
+      name: xynergyos-intelligence-gateway-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 50
+      vpc_connector: redis-connector
+      vpc_egress: private-ranges-only
+      env_vars:
+        NODE_ENV: production
+        XYNERGY_ENV: prod
+        MOCK_MODE: "false"
+      secrets:
+        JWT_SECRET: jwt-secret-prod:latest
+        SLACK_CLIENT_SECRET: slack-secret-prod:latest
+        GMAIL_CLIENT_SECRET: gmail-secret-prod:latest
+
+  slack-intelligence-service:
+    type: typescript
+    path: ./slack-intelligence-service
+    description: "Slack workspace integration"
+    dev:
+      name: slack-intelligence-service
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 10
+      env_vars:
+        XYNERGY_ENV: dev
+        MOCK_MODE: "true"
+      secrets:
+        JWT_SECRET: jwt-secret-dev:latest
+    prod:
+      name: slack-intelligence-service-prod
+      memory: 256Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 30
+      env_vars:
+        XYNERGY_ENV: prod
+        MOCK_MODE: "false"
+      secrets:
+        JWT_SECRET: jwt-secret-prod:latest
+        SLACK_CLIENT_SECRET: slack-secret-prod:latest
+
+  gmail-intelligence-service:
+    type: typescript
+    path: ./gmail-intelligence-service
+    description: "Gmail email intelligence and management"
+    dev:
+      name: gmail-intelligence-service
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 10
+      env_vars:
+        XYNERGY_ENV: dev
+        MOCK_MODE: "true"
+      secrets:
+        JWT_SECRET: jwt-secret-dev:latest
+    prod:
+      name: gmail-intelligence-service-prod
+      memory: 256Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 30
+      env_vars:
+        XYNERGY_ENV: prod
+        MOCK_MODE: "false"
+      secrets:
+        JWT_SECRET: jwt-secret-prod:latest
+        GMAIL_CLIENT_SECRET: gmail-secret-prod:latest
+
+  calendar-intelligence-service:
+    type: typescript
+    path: ./calendar-intelligence-service
+    description: "Calendar integration and scheduling"
+    dev:
+      name: calendar-intelligence-service
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+        MOCK_MODE: "true"
+      secrets:
+        JWT_SECRET: jwt-secret-dev:latest
+    prod:
+      name: calendar-intelligence-service-prod
+      memory: 256Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 20
+      env_vars:
+        XYNERGY_ENV: prod
+        MOCK_MODE: "false"
+      secrets:
+        JWT_SECRET: jwt-secret-prod:latest
+
+  crm-engine:
+    type: typescript
+    path: ./crm-engine
+    description: "Contact and relationship management"
+    dev:
+      name: crm-engine
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 10
+      env_vars:
+        XYNERGY_ENV: dev
+      secrets:
+        JWT_SECRET: jwt-secret-dev:latest
+    prod:
+      name: crm-engine-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 30
+      env_vars:
+        XYNERGY_ENV: prod
+      secrets:
+        JWT_SECRET: jwt-secret-prod:latest
+
+  # ============================================
+  # AI Services
+  # ============================================
+
+  ai-routing-engine:
+    type: python
+    path: ./ai-routing-engine
+    description: "Intelligent AI request routing"
+    dev:
+      name: xynergy-ai-routing-engine
+      memory: 512Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 10
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-ai-routing-engine-prod
+      memory: 1Gi
+      cpu: 2
+      min_instances: 1
+      max_instances: 50
+      env_vars:
+        XYNERGY_ENV: prod
+
+  internal-ai-service-v2:
+    type: python
+    path: ./internal-ai-service-v2
+    description: "Internal AI model hosting (v2)"
+    dev:
+      name: internal-ai-service-v2
+      memory: 1Gi
+      cpu: 2
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: internal-ai-service-v2-prod
+      memory: 2Gi
+      cpu: 4
+      min_instances: 1
+      max_instances: 20
+      env_vars:
+        XYNERGY_ENV: prod
+
+  ai-assistant:
+    type: python
+    path: ./ai-assistant
+    description: "Conversational AI interface"
+    dev:
+      name: xynergy-ai-assistant
+      memory: 512Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 10
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-ai-assistant-prod
+      memory: 1Gi
+      cpu: 2
+      min_instances: 1
+      max_instances: 30
+      env_vars:
+        XYNERGY_ENV: prod
+
+  xynergy-competency-engine:
+    type: python
+    path: ./xynergy-competency-engine
+    description: "AI competency and skill assessment"
+    dev:
+      name: xynergy-competency-engine
+      memory: 512Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-competency-engine-prod
+      memory: 1Gi
+      cpu: 2
+      min_instances: 1
+      max_instances: 15
+      env_vars:
+        XYNERGY_ENV: prod
+
+  # ============================================
+  # Data & Analytics Services
+  # ============================================
+
+  analytics-data-layer:
+    type: python
+    path: ./analytics-data-layer
+    description: "Data processing and analytics"
+    dev:
+      name: xynergy-analytics-data-layer
+      memory: 512Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 10
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-analytics-data-layer-prod
+      memory: 1Gi
+      cpu: 2
+      min_instances: 1
+      max_instances: 30
+      env_vars:
+        XYNERGY_ENV: prod
+
+  analytics-aggregation-service:
+    type: python
+    path: ./analytics-aggregation-service
+    description: "Analytics data aggregation"
+    dev:
+      name: analytics-aggregation-service
+      memory: 512Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: analytics-aggregation-service-prod
+      memory: 1Gi
+      cpu: 2
+      min_instances: 1
+      max_instances: 20
+      env_vars:
+        XYNERGY_ENV: prod
+
+  fact-checking-layer:
+    type: python
+    path: ./fact-checking-layer
+    description: "Content fact-checking and verification"
+    dev:
+      name: fact-checking-layer
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: fact-checking-layer-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 15
+      env_vars:
+        XYNERGY_ENV: prod
+
+  audit-logging-service:
+    type: python
+    path: ./audit-logging-service
+    description: "Audit logging and compliance tracking"
+    dev:
+      name: audit-logging-service
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: audit-logging-service-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 20
+      env_vars:
+        XYNERGY_ENV: prod
+
+  # ============================================
+  # Business Operations Services
+  # ============================================
+
+  marketing-engine:
+    type: python
+    path: ./marketing-engine
+    description: "AI-powered marketing campaign generation"
+    dev:
+      name: xynergy-marketing-engine
+      memory: 512Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 10
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-marketing-engine-prod
+      memory: 1Gi
+      cpu: 2
+      min_instances: 1
+      max_instances: 30
+      env_vars:
+        XYNERGY_ENV: prod
+
+  content-hub:
+    type: python
+    path: ./content-hub
+    description: "Content management and storage"
+    dev:
+      name: xynergy-content-hub
+      memory: 512Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 10
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-content-hub-prod
+      memory: 1Gi
+      cpu: 2
+      min_instances: 1
+      max_instances: 30
+      env_vars:
+        XYNERGY_ENV: prod
+
+  project-management:
+    type: python
+    path: ./project-management
+    description: "Project tracking and coordination"
+    dev:
+      name: xynergy-project-management
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 10
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-project-management-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 30
+      env_vars:
+        XYNERGY_ENV: prod
+
+  qa-engine:
+    type: python
+    path: ./qa-engine
+    description: "Quality assurance and testing"
+    dev:
+      name: xynergy-qa-engine
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-qa-engine-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 15
+      env_vars:
+        XYNERGY_ENV: prod
+
+  scheduler-automation-engine:
+    type: python
+    path: ./scheduler-automation-engine
+    description: "Task scheduling and automation"
+    dev:
+      name: xynergy-scheduler-automation-engine
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-scheduler-automation-engine-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 20
+      env_vars:
+        XYNERGY_ENV: prod
+
+  aso-engine:
+    type: python
+    path: ./aso-engine
+    description: "Adaptive Search Optimization engine"
+    dev:
+      name: aso-engine
+      memory: 512Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: aso-engine-prod
+      memory: 1Gi
+      cpu: 2
+      min_instances: 1
+      max_instances: 20
+      env_vars:
+        XYNERGY_ENV: prod
+
+  research-coordinator:
+    type: python
+    path: ./research-coordinator
+    description: "Research task orchestration"
+    dev:
+      name: research-coordinator
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: research-coordinator-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 15
+      env_vars:
+        XYNERGY_ENV: prod
+
+  # ============================================
+  # User Services & Dashboards
+  # ============================================
+
+  platform-dashboard:
+    type: python
+    path: ./platform-dashboard
+    description: "Central monitoring and control interface"
+    dev:
+      name: xynergy-platform-dashboard
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-platform-dashboard-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 15
+      env_vars:
+        XYNERGY_ENV: prod
+
+  executive-dashboard:
+    type: python
+    path: ./executive-dashboard
+    description: "Executive metrics and insights"
+    dev:
+      name: xynergy-executive-dashboard
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 3
+      env_vars:
+        XYNERGY_ENV: dev
+    prod:
+      name: xynergy-executive-dashboard-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 10
+      env_vars:
+        XYNERGY_ENV: prod
+
+  conversational-interface-service:
+    type: typescript
+    path: ./conversational-interface-service
+    description: "Conversational UI service"
+    dev:
+      name: conversational-interface-service
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+      secrets:
+        JWT_SECRET: jwt-secret-dev:latest
+    prod:
+      name: conversational-interface-service-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 20
+      env_vars:
+        XYNERGY_ENV: prod
+      secrets:
+        JWT_SECRET: jwt-secret-prod:latest
+
+  oauth-management-service:
+    type: typescript
+    path: ./oauth-management-service
+    description: "OAuth token management and auto-refresh"
+    dev:
+      name: oauth-management-service
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+      secrets:
+        JWT_SECRET: jwt-secret-dev:latest
+        ENCRYPTION_KEY: oauth-encryption-key-dev:latest
+    prod:
+      name: oauth-management-service-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 20
+      env_vars:
+        XYNERGY_ENV: prod
+      secrets:
+        JWT_SECRET: jwt-secret-prod:latest
+        ENCRYPTION_KEY: oauth-encryption-key-prod:latest
+
+  beta-program-service:
+    type: typescript
+    path: ./beta-program-service
+    description: "Beta program enrollment and management"
+    dev:
+      name: beta-program-service
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 3
+      env_vars:
+        XYNERGY_ENV: dev
+      secrets:
+        JWT_SECRET: jwt-secret-dev:latest
+    prod:
+      name: beta-program-service-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 10
+      env_vars:
+        XYNERGY_ENV: prod
+      secrets:
+        JWT_SECRET: jwt-secret-prod:latest
+
+  business-entity-service:
+    type: typescript
+    path: ./business-entity-service
+    description: "Business entity management"
+    dev:
+      name: business-entity-service
+      memory: 256Mi
+      cpu: 1
+      min_instances: 0
+      max_instances: 5
+      env_vars:
+        XYNERGY_ENV: dev
+      secrets:
+        JWT_SECRET: jwt-secret-dev:latest
+    prod:
+      name: business-entity-service-prod
+      memory: 512Mi
+      cpu: 1
+      min_instances: 1
+      max_instances: 15
+      env_vars:
+        XYNERGY_ENV: prod
+      secrets:
+        JWT_SECRET: jwt-secret-prod:latest

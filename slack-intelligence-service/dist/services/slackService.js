@@ -1,36 +1,118 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.slackService = exports.SlackService = void 0;
 const web_api_1 = require("@slack/web-api");
+const firestore_1 = require("@google-cloud/firestore");
+const crypto = __importStar(require("crypto"));
 const config_1 = require("../config/config");
 const logger_1 = require("../utils/logger");
 const errorHandler_1 = require("../middleware/errorHandler");
 /**
  * Slack Service - Manages Slack API interactions
- * NOTE: This service uses mock data when Slack credentials are not configured
+ * NOTE: Uses per-user OAuth tokens from Firestore
  */
 class SlackService {
-    client = null;
+    firestore;
     isMockMode = false;
+    encryptionKey;
     constructor() {
+        this.firestore = new firestore_1.Firestore();
+        this.encryptionKey = process.env.TOKEN_ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
         this.initialize();
     }
     initialize() {
-        if (config_1.appConfig.slack.botToken) {
-            try {
-                this.client = new web_api_1.WebClient(config_1.appConfig.slack.botToken);
-                this.isMockMode = false;
-                logger_1.logger.info('Slack client initialized with bot token');
-            }
-            catch (error) {
-                logger_1.logger.error('Failed to initialize Slack client', { error });
-                this.isMockMode = true;
-            }
-        }
-        else {
-            logger_1.logger.warn('Slack bot token not configured - running in MOCK MODE');
+        // Check if OAuth credentials are configured
+        if (!config_1.appConfig.slack.clientId || !config_1.appConfig.slack.clientSecret) {
+            logger_1.logger.warn('Slack OAuth not configured - running in MOCK MODE');
             this.isMockMode = true;
         }
+        else {
+            logger_1.logger.info('Slack service initialized with OAuth support');
+            this.isMockMode = false;
+        }
+    }
+    /**
+     * Get user-specific Slack client with their OAuth token
+     */
+    async getUserClient(userId) {
+        // Check if mock mode
+        if (this.isMockMode) {
+            throw new errorHandler_1.ServiceUnavailableError('Slack not configured. Please contact administrator.');
+        }
+        try {
+            // Retrieve user's OAuth token from Firestore
+            const tokenDoc = await this.firestore
+                .collection('oauth_tokens')
+                .doc(`${userId}_slack`)
+                .get();
+            if (!tokenDoc.exists) {
+                throw new errorHandler_1.ServiceUnavailableError('Slack not connected. Please connect your Slack account in Settings > Integrations.');
+            }
+            const tokenData = tokenDoc.data();
+            // Check token expiry
+            if (tokenData?.expiresAt && new Date() >= tokenData.expiresAt.toDate()) {
+                logger_1.logger.warn('Slack token expired', { userId });
+                throw new errorHandler_1.ServiceUnavailableError('Slack token expired. Please reconnect your Slack account in Settings > Integrations.');
+            }
+            // Decrypt access token
+            const accessToken = this.decrypt(tokenData?.accessToken);
+            // Create user-specific client
+            return new web_api_1.WebClient(accessToken);
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get user Slack client', { error: error.message, userId });
+            throw error;
+        }
+    }
+    /**
+     * Decrypt token using AES-256-GCM
+     */
+    decrypt(encryptedData) {
+        const parts = encryptedData.split(':');
+        if (parts.length !== 3) {
+            throw new Error('Invalid encrypted data format');
+        }
+        const iv = Buffer.from(parts[0], 'hex');
+        const authTag = Buffer.from(parts[1], 'hex');
+        const encrypted = parts[2];
+        const decipher = crypto.createDecipheriv('aes-256-gcm', Buffer.from(this.encryptionKey, 'hex'), iv);
+        decipher.setAuthTag(authTag);
+        let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return decrypted;
     }
     /**
      * Check if service is in mock mode
@@ -41,7 +123,7 @@ class SlackService {
     /**
      * Test Slack API connection
      */
-    async testConnection() {
+    async testConnection(userId) {
         if (this.isMockMode) {
             return {
                 ok: true,
@@ -49,14 +131,15 @@ class SlackService {
             };
         }
         try {
-            const result = await this.client.auth.test();
+            const client = await this.getUserClient(userId);
+            const result = await client.auth.test();
             return {
                 ok: true,
                 team: result.team,
             };
         }
         catch (error) {
-            logger_1.logger.error('Slack connection test failed', { error: error.message });
+            logger_1.logger.error('Slack connection test failed', { error: error.message, userId });
             return {
                 ok: false,
                 error: error.message,
@@ -66,31 +149,33 @@ class SlackService {
     /**
      * List channels in workspace
      */
-    async listChannels() {
+    async listChannels(userId) {
         if (this.isMockMode) {
             return this.getMockChannels();
         }
         try {
-            const result = await this.client.conversations.list({
+            const client = await this.getUserClient(userId);
+            const result = await client.conversations.list({
                 types: 'public_channel,private_channel',
                 limit: 100,
             });
             return result.channels || [];
         }
         catch (error) {
-            logger_1.logger.error('Failed to list Slack channels', { error: error.message });
+            logger_1.logger.error('Failed to list Slack channels', { error: error.message, userId });
             throw new errorHandler_1.ServiceUnavailableError('Failed to fetch Slack channels');
         }
     }
     /**
      * Get channel history
      */
-    async getChannelHistory(channelId, limit = 20) {
+    async getChannelHistory(userId, channelId, limit = 20) {
         if (this.isMockMode) {
             return this.getMockMessages(channelId, limit);
         }
         try {
-            const result = await this.client.conversations.history({
+            const client = await this.getUserClient(userId);
+            const result = await client.conversations.history({
                 channel: channelId,
                 limit,
             });
@@ -99,6 +184,7 @@ class SlackService {
         catch (error) {
             logger_1.logger.error('Failed to fetch channel history', {
                 channelId,
+                userId,
                 error: error.message,
             });
             throw new errorHandler_1.ServiceUnavailableError('Failed to fetch channel history');
@@ -107,12 +193,13 @@ class SlackService {
     /**
      * Post message to channel
      */
-    async postMessage(channelId, text, blocks) {
+    async postMessage(userId, channelId, text, blocks) {
         if (this.isMockMode) {
             return this.getMockMessageResponse(channelId, text);
         }
         try {
-            const result = await this.client.chat.postMessage({
+            const client = await this.getUserClient(userId);
+            const result = await client.chat.postMessage({
                 channel: channelId,
                 text,
                 blocks,
@@ -122,6 +209,7 @@ class SlackService {
         catch (error) {
             logger_1.logger.error('Failed to post Slack message', {
                 channelId,
+                userId,
                 error: error.message,
             });
             throw new errorHandler_1.ServiceUnavailableError('Failed to post message to Slack');
@@ -130,12 +218,13 @@ class SlackService {
     /**
      * Search messages
      */
-    async searchMessages(query, count = 20) {
+    async searchMessages(userId, query, count = 20) {
         if (this.isMockMode) {
             return this.getMockSearchResults(query, count);
         }
         try {
-            const result = await this.client.search.messages({
+            const client = await this.getUserClient(userId);
+            const result = await client.search.messages({
                 query,
                 count,
                 sort: 'timestamp',
@@ -146,6 +235,7 @@ class SlackService {
         catch (error) {
             logger_1.logger.error('Failed to search Slack messages', {
                 query,
+                userId,
                 error: error.message,
             });
             throw new errorHandler_1.ServiceUnavailableError('Failed to search Slack messages');
@@ -154,19 +244,21 @@ class SlackService {
     /**
      * Get user info
      */
-    async getUserInfo(userId) {
+    async getUserInfo(requestingUserId, slackUserId) {
         if (this.isMockMode) {
-            return this.getMockUser(userId);
+            return this.getMockUser(slackUserId);
         }
         try {
-            const result = await this.client.users.info({
-                user: userId,
+            const client = await this.getUserClient(requestingUserId);
+            const result = await client.users.info({
+                user: slackUserId,
             });
             return result.user;
         }
         catch (error) {
             logger_1.logger.error('Failed to get Slack user info', {
-                userId,
+                slackUserId,
+                requestingUserId,
                 error: error.message,
             });
             throw new errorHandler_1.ServiceUnavailableError('Failed to fetch user info');
@@ -175,18 +267,19 @@ class SlackService {
     /**
      * List users in workspace
      */
-    async listUsers() {
+    async listUsers(userId) {
         if (this.isMockMode) {
             return this.getMockUsers();
         }
         try {
-            const result = await this.client.users.list({
+            const client = await this.getUserClient(userId);
+            const result = await client.users.list({
                 limit: 100,
             });
             return result.members || [];
         }
         catch (error) {
-            logger_1.logger.error('Failed to list Slack users', { error: error.message });
+            logger_1.logger.error('Failed to list Slack users', { error: error.message, userId });
             throw new errorHandler_1.ServiceUnavailableError('Failed to fetch Slack users');
         }
     }

@@ -1,23 +1,121 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.gmailService = exports.GmailService = void 0;
+const googleapis_1 = require("googleapis");
+const firestore_1 = require("@google-cloud/firestore");
+const crypto = __importStar(require("crypto"));
+const config_1 = require("../config");
 const logger_1 = require("../utils/logger");
 const errorHandler_1 = require("../middleware/errorHandler");
 /**
  * Gmail Service - Manages Gmail API interactions
- * NOTE: This service uses mock data when Gmail credentials are not configured
+ * NOTE: Uses per-user OAuth tokens from Firestore
  */
 class GmailService {
-    gmail = null;
+    firestore;
     isMockMode = false;
+    encryptionKey;
     constructor() {
+        this.firestore = new firestore_1.Firestore();
+        this.encryptionKey = process.env.TOKEN_ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
         this.initialize();
     }
     initialize() {
-        // For now, always use mock mode until OAuth is configured
-        // TODO: Implement OAuth flow for production use
-        logger_1.logger.warn('Gmail credentials not configured - running in MOCK MODE');
-        this.isMockMode = true;
+        // Check if OAuth credentials are configured
+        if (!config_1.appConfig.gmail.clientId || !config_1.appConfig.gmail.clientSecret) {
+            logger_1.logger.warn('Gmail OAuth not configured - running in MOCK MODE');
+            this.isMockMode = true;
+        }
+        else {
+            logger_1.logger.info('Gmail service initialized with OAuth support');
+            this.isMockMode = false;
+        }
+    }
+    /**
+     * Get user-specific Gmail client with their OAuth token
+     */
+    async getUserClient(userId) {
+        // Check if mock mode
+        if (this.isMockMode) {
+            throw new errorHandler_1.ServiceUnavailableError('Gmail not configured. Please contact administrator.');
+        }
+        try {
+            // Retrieve user's OAuth token from Firestore
+            const tokenDoc = await this.firestore
+                .collection('oauth_tokens')
+                .doc(`${userId}_gmail`)
+                .get();
+            if (!tokenDoc.exists) {
+                throw new errorHandler_1.ServiceUnavailableError('Gmail not connected. Please connect your Gmail account in Settings > Integrations.');
+            }
+            const tokenData = tokenDoc.data();
+            // Check token expiry
+            if (tokenData?.expiresAt && new Date() >= tokenData.expiresAt.toDate()) {
+                logger_1.logger.warn('Gmail token expired', { userId });
+                throw new errorHandler_1.ServiceUnavailableError('Gmail token expired. Please reconnect your Gmail account in Settings > Integrations.');
+            }
+            // Decrypt access token
+            const accessToken = this.decrypt(tokenData?.accessToken);
+            // Create user-specific OAuth client
+            const oauth2Client = new googleapis_1.google.auth.OAuth2(config_1.appConfig.gmail.clientId, config_1.appConfig.gmail.clientSecret, config_1.appConfig.gmail.redirectUri);
+            oauth2Client.setCredentials({ access_token: accessToken });
+            // Return Gmail API client
+            return googleapis_1.google.gmail({ version: 'v1', auth: oauth2Client });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get user Gmail client', { error: error.message, userId });
+            throw error;
+        }
+    }
+    /**
+     * Decrypt token using AES-256-GCM
+     */
+    decrypt(encryptedData) {
+        const parts = encryptedData.split(':');
+        if (parts.length !== 3) {
+            throw new Error('Invalid encrypted data format');
+        }
+        const iv = Buffer.from(parts[0], 'hex');
+        const authTag = Buffer.from(parts[1], 'hex');
+        const encrypted = parts[2];
+        const decipher = crypto.createDecipheriv('aes-256-gcm', Buffer.from(this.encryptionKey, 'hex'), iv);
+        decipher.setAuthTag(authTag);
+        let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return decrypted;
     }
     /**
      * Check if service is in mock mode
@@ -28,7 +126,7 @@ class GmailService {
     /**
      * Test Gmail API connection
      */
-    async testConnection() {
+    async testConnection(userId) {
         if (this.isMockMode) {
             return {
                 ok: true,
@@ -36,14 +134,15 @@ class GmailService {
             };
         }
         try {
-            const profile = await this.gmail.users.getProfile({ userId: 'me' });
+            const gmail = await this.getUserClient(userId);
+            const profile = await gmail.users.getProfile({ userId: 'me' });
             return {
                 ok: true,
                 email: profile.data.emailAddress,
             };
         }
         catch (error) {
-            logger_1.logger.error('Gmail connection test failed', { error: error.message });
+            logger_1.logger.error('Gmail connection test failed', { error: error.message, userId });
             return {
                 ok: false,
                 error: error.message,
@@ -53,12 +152,13 @@ class GmailService {
     /**
      * List messages in inbox
      */
-    async listMessages(maxResults = 20, query) {
+    async listMessages(userId, maxResults = 20, query) {
         if (this.isMockMode) {
             return this.getMockMessages(maxResults);
         }
         try {
-            const response = await this.gmail.users.messages.list({
+            const gmail = await this.getUserClient(userId);
+            const response = await gmail.users.messages.list({
                 userId: 'me',
                 maxResults,
                 q: query,
@@ -66,19 +166,20 @@ class GmailService {
             return response.data.messages || [];
         }
         catch (error) {
-            logger_1.logger.error('Failed to list Gmail messages', { error: error.message });
+            logger_1.logger.error('Failed to list Gmail messages', { error: error.message, userId });
             throw new errorHandler_1.ServiceUnavailableError('Failed to fetch Gmail messages');
         }
     }
     /**
      * Get message details
      */
-    async getMessage(messageId) {
+    async getMessage(userId, messageId) {
         if (this.isMockMode) {
             return this.getMockMessageDetails(messageId);
         }
         try {
-            const response = await this.gmail.users.messages.get({
+            const gmail = await this.getUserClient(userId);
+            const response = await gmail.users.messages.get({
                 userId: 'me',
                 id: messageId,
                 format: 'full',
@@ -86,20 +187,21 @@ class GmailService {
             return this.parseMessage(response.data);
         }
         catch (error) {
-            logger_1.logger.error('Failed to get Gmail message', { messageId, error: error.message });
+            logger_1.logger.error('Failed to get Gmail message', { messageId, userId, error: error.message });
             throw new errorHandler_1.ServiceUnavailableError('Failed to fetch message');
         }
     }
     /**
      * Send email
      */
-    async sendMessage(to, subject, body, cc, bcc) {
+    async sendMessage(userId, to, subject, body, cc, bcc) {
         if (this.isMockMode) {
             return this.getMockSentMessage(to, subject);
         }
         try {
+            const gmail = await this.getUserClient(userId);
             const email = this.createEmailMessage(to, subject, body, cc, bcc);
-            const response = await this.gmail.users.messages.send({
+            const response = await gmail.users.messages.send({
                 userId: 'me',
                 requestBody: {
                     raw: email,
@@ -108,35 +210,36 @@ class GmailService {
             return response.data;
         }
         catch (error) {
-            logger_1.logger.error('Failed to send Gmail message', { to, subject, error: error.message });
+            logger_1.logger.error('Failed to send Gmail message', { to, subject, userId, error: error.message });
             throw new errorHandler_1.ServiceUnavailableError('Failed to send email');
         }
     }
     /**
      * Search messages
      */
-    async searchMessages(query, maxResults = 20) {
+    async searchMessages(userId, query, maxResults = 20) {
         if (this.isMockMode) {
             return this.getMockSearchResults(query, maxResults);
         }
-        return this.listMessages(maxResults, query);
+        return this.listMessages(userId, maxResults, query);
     }
     /**
      * Get thread
      */
-    async getThread(threadId) {
+    async getThread(userId, threadId) {
         if (this.isMockMode) {
             return this.getMockThread(threadId);
         }
         try {
-            const response = await this.gmail.users.threads.get({
+            const gmail = await this.getUserClient(userId);
+            const response = await gmail.users.threads.get({
                 userId: 'me',
                 id: threadId,
             });
             return response.data;
         }
         catch (error) {
-            logger_1.logger.error('Failed to get Gmail thread', { threadId, error: error.message });
+            logger_1.logger.error('Failed to get Gmail thread', { threadId, userId, error: error.message });
             throw new errorHandler_1.ServiceUnavailableError('Failed to fetch thread');
         }
     }

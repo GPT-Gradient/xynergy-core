@@ -50,23 +50,13 @@ router.get('/deep', asyncHandler(async (req: Request, res: Response) => {
     };
   }
 
-  // Check Slack API
-  try {
-    const slackStatus = await slackService.testConnection();
-    checks.slack = {
-      status: slackStatus.ok ? 'healthy' : 'degraded',
-      connected: slackStatus.ok,
-      team: slackStatus.team,
-      mockMode: slackService.isInMockMode(),
-    };
-  } catch (error: any) {
-    checks.slack = {
-      status: 'degraded',
-      connected: false,
-      error: error.message,
-      mockMode: slackService.isInMockMode(),
-    };
-  }
+  // Check Slack API configuration (not per-user since health check is public)
+  checks.slack = {
+    status: slackService.isInMockMode() ? 'degraded' : 'healthy',
+    configured: !slackService.isInMockMode(),
+    mockMode: slackService.isInMockMode(),
+    note: 'Health check does not test per-user OAuth tokens',
+  };
 
   // Determine overall status
   const allHealthy = Object.values(checks).every(

@@ -8,6 +8,14 @@ export interface Config {
   gcpProjectId: string;
   gcpRegion: string;
 
+  // Gmail OAuth credentials (app-level, used to initiate OAuth flows)
+  // Phase 3: Services now use per-user OAuth tokens from Firestore
+  gmail: {
+    clientId?: string;
+    clientSecret?: string;
+    redirectUri: string;
+  };
+
   // Firebase
   firebase: {
     projectId: string;
@@ -34,16 +42,23 @@ export interface Config {
 
   // Pub/Sub
   pubsub: {
-    crmEventsTopic: string;
+    gmailEventsTopic: string;
   };
 }
 
 export const appConfig: Config = {
   port: parseInt(process.env.PORT || '8080', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
-  serviceName: 'crm-engine',
+  serviceName: 'gmail-intelligence-service',
   gcpProjectId: process.env.GCP_PROJECT_ID || 'xynergy-dev-1757909467',
   gcpRegion: process.env.GCP_REGION || 'us-central1',
+
+  gmail: {
+    clientId: process.env.GMAIL_CLIENT_ID,
+    clientSecret: process.env.GMAIL_CLIENT_SECRET,
+    redirectUri: process.env.GMAIL_REDIRECT_URI ||
+      'https://xynergyos-intelligence-gateway-835612502919.us-central1.run.app/api/v2/gmail/oauth/callback',
+  },
 
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID || 'xynergy-dev-1757909467',
@@ -66,6 +81,6 @@ export const appConfig: Config = {
   },
 
   pubsub: {
-    crmEventsTopic: process.env.CRM_EVENTS_TOPIC || 'crm-events',
+    gmailEventsTopic: process.env.GMAIL_EVENTS_TOPIC || 'gmail-events',
   },
 };

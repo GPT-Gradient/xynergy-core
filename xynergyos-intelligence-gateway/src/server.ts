@@ -18,12 +18,22 @@ import { generalRateLimit } from './middleware/rateLimit';
 // Import routes
 import healthRoutes from './routes/health';
 import metricsRoutes from './routes/metrics';
+import authRoutes from './routes/auth';
+import profileRoutes from './routes/profile';
+import oauthRoutes from './routes/oauth';
+import integrationsRoutes from './routes/integrations';
 import slackRoutes from './routes/slack';
 import gmailRoutes from './routes/gmail';
 import crmRoutes from './routes/crm';
 import aiRoutes from './routes/ai';
 import marketingRoutes from './routes/marketing';
 import asoRoutes from './routes/aso';
+import memoryRoutes from './routes/memory';
+import researchRoutes from './routes/research';
+import calendarRoutes from './routes/calendar';
+import intelligenceRoutes from './routes/intelligence';
+import adminRoutes from './routes/admin';
+import projectsRoutes from './routes/projects';
 
 export class Server {
   private app: Application;
@@ -71,6 +81,16 @@ export class Server {
     this.app.use('/api/v1/metrics', metricsRoutes);
     this.app.use('/metrics', metricsRoutes);
 
+    // Authentication (no auth middleware - these endpoints create tokens)
+    this.app.use('/api/v1/auth', authRoutes);
+
+    // User Profile (authenticated)
+    this.app.use('/api/v1/profile', profileRoutes);
+
+    // OAuth and Integrations Management (authenticated)
+    this.app.use('/api/v1/oauth', oauthRoutes);
+    this.app.use('/api/v1/integrations', integrationsRoutes);
+
     // Intelligence Gateway routes (with path aliases for frontend compatibility)
     // Original paths: /api/xynergyos/v2/*
     this.app.use('/api/xynergyos/v2/slack', slackRoutes);
@@ -83,12 +103,19 @@ export class Server {
     this.app.use('/api/v2/gmail', gmailRoutes);
     this.app.use('/api/v2/email', gmailRoutes); // Frontend uses "email" instead of "gmail"
     this.app.use('/api/v2/crm', crmRoutes);
-    // this.app.use('/api/v2/calendar', calendarRoutes); // TODO: Create calendar service
+    this.app.use('/api/v2/calendar', calendarRoutes);
 
     // Platform service routes (v1 API)
     this.app.use('/api/v1/ai', aiRoutes);
     this.app.use('/api/v1/marketing', marketingRoutes);
     this.app.use('/api/v1/aso', asoRoutes);
+    this.app.use('/api/v1/memory', memoryRoutes);
+    this.app.use('/api/v1/research-sessions', researchRoutes);
+    this.app.use('/api/v1/intelligence', intelligenceRoutes);
+
+    // Admin and Projects routes (authenticated)
+    this.app.use('/api/v1/admin', adminRoutes);
+    this.app.use('/api/v1/projects', projectsRoutes);
 
     // 404 handler
     this.app.use((req, res) => {

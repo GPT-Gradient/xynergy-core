@@ -29,17 +29,13 @@ router.get('/deep', asyncHandler(async (req: Request, res: Response) => {
     checks.firebase = { status: 'degraded', firestoreConnected: false };
   }
 
-  try {
-    const gmailStatus = await gmailService.testConnection();
-    checks.gmail = {
-      status: gmailStatus.ok ? 'healthy' : 'degraded',
-      connected: gmailStatus.ok,
-      email: gmailStatus.email,
-      mockMode: gmailService.isInMockMode(),
-    };
-  } catch (error: any) {
-    checks.gmail = { status: 'degraded', connected: false, mockMode: true };
-  }
+  // Check Gmail API configuration (not per-user since health check is public)
+  checks.gmail = {
+    status: gmailService.isInMockMode() ? 'degraded' : 'healthy',
+    configured: !gmailService.isInMockMode(),
+    mockMode: gmailService.isInMockMode(),
+    note: 'Health check does not test per-user OAuth tokens',
+  };
 
   const allHealthy = Object.values(checks).every((check: any) => check.status === 'healthy');
 

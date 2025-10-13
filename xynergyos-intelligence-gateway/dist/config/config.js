@@ -17,14 +17,18 @@ exports.appConfig = {
             'https://slack-intelligence-service-835612502919.us-central1.run.app',
         gmailIntelligence: process.env.GMAIL_INTELLIGENCE_URL ||
             'https://gmail-intelligence-service-835612502919.us-central1.run.app',
-        calendarIntelligence: process.env.CALENDAR_INTELLIGENCE_URL || '',
+        calendarIntelligence: process.env.CALENDAR_INTELLIGENCE_URL ||
+            'https://calendar-intelligence-service-835612502919.us-central1.run.app',
         crmEngine: process.env.CRM_ENGINE_URL ||
             'https://crm-engine-vgjxy554mq-uc.a.run.app',
         marketingEngine: process.env.MARKETING_ENGINE_URL ||
             'https://marketing-engine-vgjxy554mq-uc.a.run.app',
         asoEngine: process.env.ASO_ENGINE_URL ||
             'https://aso-engine-vgjxy554mq-uc.a.run.app',
-        researchCoordinator: process.env.RESEARCH_COORDINATOR_URL || '',
+        researchCoordinator: process.env.RESEARCH_COORDINATOR_URL ||
+            'https://research-coordinator-835612502919.us-central1.run.app',
+        memoryService: process.env.MEMORY_SERVICE_URL ||
+            'https://living-memory-service-vgjxy554mq-uc.a.run.app',
     },
     redis: {
         host: process.env.REDIS_HOST || '10.229.184.219',

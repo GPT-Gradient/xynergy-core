@@ -1,12 +1,21 @@
 /**
  * Slack Service - Manages Slack API interactions
- * NOTE: This service uses mock data when Slack credentials are not configured
+ * NOTE: Uses per-user OAuth tokens from Firestore
  */
 export declare class SlackService {
-    private client;
+    private firestore;
     private isMockMode;
+    private encryptionKey;
     constructor();
     private initialize;
+    /**
+     * Get user-specific Slack client with their OAuth token
+     */
+    private getUserClient;
+    /**
+     * Decrypt token using AES-256-GCM
+     */
+    private decrypt;
     /**
      * Check if service is in mock mode
      */
@@ -14,7 +23,7 @@ export declare class SlackService {
     /**
      * Test Slack API connection
      */
-    testConnection(): Promise<{
+    testConnection(userId: string): Promise<{
         ok: boolean;
         team?: string;
         error?: string;
@@ -22,27 +31,27 @@ export declare class SlackService {
     /**
      * List channels in workspace
      */
-    listChannels(): Promise<any[]>;
+    listChannels(userId: string): Promise<any[]>;
     /**
      * Get channel history
      */
-    getChannelHistory(channelId: string, limit?: number): Promise<any[]>;
+    getChannelHistory(userId: string, channelId: string, limit?: number): Promise<any[]>;
     /**
      * Post message to channel
      */
-    postMessage(channelId: string, text: string, blocks?: any[]): Promise<any>;
+    postMessage(userId: string, channelId: string, text: string, blocks?: any[]): Promise<any>;
     /**
      * Search messages
      */
-    searchMessages(query: string, count?: number): Promise<any>;
+    searchMessages(userId: string, query: string, count?: number): Promise<any>;
     /**
      * Get user info
      */
-    getUserInfo(userId: string): Promise<any>;
+    getUserInfo(requestingUserId: string, slackUserId: string): Promise<any>;
     /**
      * List users in workspace
      */
-    listUsers(): Promise<any[]>;
+    listUsers(userId: string): Promise<any[]>;
     private getMockChannels;
     private getMockMessages;
     private getMockMessageResponse;

@@ -82,7 +82,7 @@ const errorHandler = (err, req, res, next) => {
     res.status(statusCode).json(errorResponse);
 };
 exports.errorHandler = errorHandler;
-// Async error wrapper
+// Async error wrapper - accepts any request type (Request, AuthenticatedRequest, TenantRequest)
 const asyncHandler = (fn) => {
     return (req, res, next) => {
         Promise.resolve(fn(req, res, next)).catch(next);

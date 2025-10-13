@@ -26,5 +26,5 @@ export declare class ServiceUnavailableError extends Error implements AppError {
     constructor(message?: string);
 }
 export declare const errorHandler: (err: AppError, req: Request, res: Response, next: NextFunction) => void;
-export declare const asyncHandler: (fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) => (req: Request, res: Response, next: NextFunction) => void;
+export declare const asyncHandler: (fn: (req: any, res: Response, next: NextFunction) => Promise<any>) => (req: any, res: Response, next: NextFunction) => void;
 //# sourceMappingURL=errorHandler.d.ts.map
