@@ -1,0 +1,15 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+google-cloud-bigquery==3.13.0
+google-cloud-firestore==2.13.1
+google-cloud-pubsub==2.18.4
+google-cloud-secret-manager==2.16.4
+redis[hiredis]==5.0.1
+pydantic==2.4.2
+python-multipart==0.0.6
+httpx==0.25.0
+structlog==23.2.0
+prometheus-client==0.19.0
+slowapi==0.1.9
+tenacity==8.2.3
+aiocache==0.12.2

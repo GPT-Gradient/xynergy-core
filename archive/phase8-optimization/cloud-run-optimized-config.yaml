@@ -1,0 +1,241 @@
+# Cloud Run Optimized Configuration
+# Resource allocations based on Phase 8 optimization analysis
+# Date: October 12, 2025
+
+services:
+  # Core Platform Services - Higher resource allocation
+  platform-dashboard:
+    memory: 1Gi
+    cpu: 2
+    min_instances: 2
+    max_instances: 100
+    concurrency: 100
+    timeout: 60
+
+  system-runtime:
+    memory: 1Gi
+    cpu: 2
+    min_instances: 2
+    max_instances: 100
+    concurrency: 100
+    timeout: 60
+
+  # AI Services - Optimized for latency
+  ai-routing-engine:
+    memory: 2Gi
+    cpu: 2
+    min_instances: 2
+    max_instances: 50
+    concurrency: 50
+    timeout: 120
+    vpc_connector: xynergy-connector
+
+  ai-providers:
+    memory: 1Gi
+    cpu: 2
+    min_instances: 1
+    max_instances: 50
+    concurrency: 50
+    timeout: 120
+
+  internal-ai-service-v2:
+    memory: 2Gi
+    cpu: 4
+    min_instances: 1
+    max_instances: 20
+    concurrency: 10
+    timeout: 300
+    gpu: nvidia-tesla-t4  # If GPU available
+
+  # Intelligence Gateway - Optimized
+  xynergyos-intelligence-gateway:
+    memory: 512Mi
+    cpu: 1
+    min_instances: 2
+    max_instances: 100
+    concurrency: 250
+    timeout: 60
+    vpc_connector: xynergy-connector
+    environment:
+      - REDIS_HOST=10.229.184.219
+      - CACHE_TTL=300
+      - MAX_WEBSOCKET_CONNECTIONS=1000
+      - RATE_LIMIT_PER_MIN=200
+
+  # Communication Services - Lightweight
+  slack-intelligence-service:
+    memory: 256Mi
+    cpu: 0.5
+    min_instances: 1
+    max_instances: 50
+    concurrency: 100
+    timeout: 30
+
+  gmail-intelligence-service:
+    memory: 256Mi
+    cpu: 0.5
+    min_instances: 1
+    max_instances: 50
+    concurrency: 100
+    timeout: 30
+
+  crm-engine:
+    memory: 512Mi
+    cpu: 1
+    min_instances: 1
+    max_instances: 50
+    concurrency: 100
+    timeout: 30
+
+  # Analytics Services - Optimized
+  audit-logging-service:
+    memory: 512Mi
+    cpu: 1
+    min_instances: 1
+    max_instances: 100
+    concurrency: 1000
+    timeout: 300
+    environment:
+      - BATCH_SIZE=100
+      - FLUSH_INTERVAL=5000
+      - CIRCUIT_BREAKER_THRESHOLD=5
+
+  analytics-aggregation-service:
+    memory: 1Gi
+    cpu: 1
+    min_instances: 1
+    max_instances: 50
+    concurrency: 100
+    timeout: 120
+    environment:
+      - CACHE_L1_TTL=60
+      - CACHE_L2_TTL=300
+      - MAX_QUERY_RESULTS=100
+
+  # Marketing & Content Services
+  marketing-engine:
+    memory: 1Gi
+    cpu: 1
+    min_instances: 1
+    max_instances: 50
+    concurrency: 50
+    timeout: 120
+
+  aso-engine:
+    memory: 1Gi
+    cpu: 1
+    min_instances: 1
+    max_instances: 20
+    concurrency: 50
+    timeout: 120
+
+  content-hub:
+    memory: 512Mi
+    cpu: 0.5
+    min_instances: 1
+    max_instances: 50
+    concurrency: 100
+    timeout: 60
+
+  # Operational Services
+  scheduler-automation-engine:
+    memory: 512Mi
+    cpu: 0.5
+    min_instances: 1
+    max_instances: 20
+    concurrency: 50
+    timeout: 60
+
+  qa-engine:
+    memory: 512Mi
+    cpu: 0.5
+    min_instances: 1
+    max_instances: 20
+    concurrency: 50
+    timeout: 60
+
+  # Phase Services - Lightweight
+  tenant-onboarding-service:
+    memory: 256Mi
+    cpu: 0.5
+    min_instances: 0
+    max_instances: 10
+    concurrency: 50
+    timeout: 30
+
+  beta-program-service:
+    memory: 256Mi
+    cpu: 0.5
+    min_instances: 0
+    max_instances: 10
+    concurrency: 50
+    timeout: 30
+
+  oauth-management-service:
+    memory: 256Mi
+    cpu: 0.5
+    min_instances: 0
+    max_instances: 10
+    concurrency: 50
+    timeout: 30
+
+# Autoscaling Configuration
+autoscaling:
+  target_cpu_utilization: 60
+  target_memory_utilization: 70
+  scale_down_delay: 120  # seconds
+  scale_up_delay: 30     # seconds
+
+# Cost Optimization Settings
+cost_optimization:
+  use_spot_instances: true
+  idle_timeout: 900  # 15 minutes
+  compress_responses: true
+  enable_cdn: true
+  cache_static_assets: true
+
+# Monitoring & Alerts
+monitoring:
+  enable_profiling: true
+  enable_tracing: true
+  log_level: info
+  metrics_export_interval: 60
+  alert_thresholds:
+    error_rate: 0.01      # 1%
+    latency_p95: 500      # ms
+    cpu_usage: 80         # %
+    memory_usage: 85      # %
+    concurrent_requests: 0.8  # 80% of max
+
+# Security Settings
+security:
+  require_authentication: true
+  enable_cors: true
+  allowed_origins:
+    - "https://xynergy-platform.com"
+    - "https://*.xynergy.com"
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 200
+    burst_size: 50
+  api_key_rotation: 30  # days
+
+# Network Configuration
+network:
+  vpc_connector: xynergy-connector
+  vpc_egress: private-ranges-only
+  internal_only_services:
+    - audit-logging-service
+    - analytics-aggregation-service
+    - internal-ai-service-v2
+
+# Deployment Strategy
+deployment:
+  strategy: blue-green
+  rollback_on_failure: true
+  health_check_interval: 30
+  readiness_check_path: /health
+  liveness_check_path: /health
+  startup_probe_delay: 10
+  max_surge: 25%
+  max_unavailable: 0

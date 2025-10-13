@@ -153,6 +153,56 @@ class OpportunityResponse(BaseModel):
     estimated_traffic: int
     recommendation: str
 
+# Phase 4: Content Approval Models
+class ConfidenceScores(BaseModel):
+    """AI confidence scores for content quality assessment"""
+    quality_score: float = Field(..., ge=0.0, le=100.0, description="Grammar, readability, length")
+    brand_safety_score: float = Field(..., ge=0.0, le=100.0, description="Safety and compliance")
+    keyword_relevance_score: float = Field(..., ge=0.0, le=100.0, description="Keyword optimization")
+    competitive_analysis_score: float = Field(..., ge=0.0, le=100.0, description="Competitive positioning")
+    overall_confidence: float = Field(..., ge=0.0, le=100.0, description="Weighted average")
+
+class RiskTolerance(BaseModel):
+    """App-specific risk tolerance settings"""
+    risk_level: str = Field(..., description="conservative, moderate, or aggressive")
+    auto_approve_threshold: float = Field(..., ge=0.0, le=100.0, description="Min confidence for auto-approval")
+    manual_review_categories: List[str] = Field(default=[], description="Content types requiring review")
+    blacklisted_words: List[str] = Field(default=[], description="Words that trigger manual review")
+
+class ContentApproval(BaseModel):
+    """Content approval record"""
+    approval_id: str
+    content_id: str
+    tenant_id: str
+    app_id: Optional[str]
+    status: str = Field(..., description="pending, approved, rejected, auto_approved")
+    confidence_scores: ConfidenceScores
+    approved_by: Optional[str] = None
+    approved_at: Optional[str] = None
+    rejected_by: Optional[str] = None
+    rejected_at: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    auto_approved: bool = False
+    created_at: str
+    updated_at: str
+
+class ApproveContentRequest(BaseModel):
+    """Request to approve content"""
+    approved_by: str
+    notes: Optional[str] = None
+
+class RejectContentRequest(BaseModel):
+    """Request to reject content"""
+    rejected_by: str
+    rejection_reason: str
+    request_regeneration: bool = False
+
+class BulkApprovalRequest(BaseModel):
+    """Bulk approval request"""
+    content_ids: List[str] = Field(..., max_items=100)
+    approved_by: str
+    notes: Optional[str] = None
+
 @app.get("/")
 async def root():
     return {
@@ -222,6 +272,144 @@ async def health_check():
 
     return health_status
 
+# Phase 4: Confidence Scoring Functions
+def calculate_quality_score(title: str, meta_description: Optional[str], word_count: Optional[int]) -> float:
+    """Calculate quality score based on grammar, readability, and length"""
+    score = 0.0
+
+    # Length appropriateness (30 points)
+    if word_count:
+        if 300 <= word_count <= 2000:
+            score += 30.0
+        elif 200 <= word_count < 300 or 2000 < word_count <= 3000:
+            score += 20.0
+        elif 100 <= word_count < 200 or 3000 < word_count <= 5000:
+            score += 10.0
+
+    # Title quality (40 points)
+    if title:
+        title_len = len(title)
+        if 30 <= title_len <= 60:
+            score += 40.0
+        elif 20 <= title_len < 30 or 60 < title_len <= 80:
+            score += 30.0
+        elif title_len < 20 or title_len > 80:
+            score += 10.0
+
+    # Meta description quality (30 points)
+    if meta_description:
+        desc_len = len(meta_description)
+        if 120 <= desc_len <= 160:
+            score += 30.0
+        elif 100 <= desc_len < 120 or 160 < desc_len <= 200:
+            score += 20.0
+
+    return min(score, 100.0)
+
+def calculate_brand_safety_score(title: str, meta_description: Optional[str], blacklisted_words: List[str] = []) -> float:
+    """Calculate brand safety score"""
+    score = 100.0
+
+    # Check for blacklisted words
+    text = f"{title} {meta_description or ''}".lower()
+    for word in blacklisted_words:
+        if word.lower() in text:
+            score -= 20.0  # Penalty for each blacklisted word
+
+    # Basic safety checks (no excessive caps, no excessive punctuation)
+    if title:
+        caps_ratio = sum(1 for c in title if c.isupper()) / len(title) if len(title) > 0 else 0
+        if caps_ratio > 0.5:
+            score -= 10.0  # Too many caps
+
+    return max(score, 0.0)
+
+def calculate_keyword_relevance_score(title: str, meta_description: Optional[str], primary_keyword: str, secondary_keywords: List[str]) -> float:
+    """Calculate keyword relevance score"""
+    score = 0.0
+    text_lower = f"{title} {meta_description or ''}".lower()
+
+    # Primary keyword in title (50 points)
+    if primary_keyword.lower() in title.lower():
+        score += 50.0
+    elif primary_keyword.lower() in text_lower:
+        score += 25.0
+
+    # Secondary keywords (30 points)
+    secondary_found = sum(1 for kw in secondary_keywords if kw.lower() in text_lower)
+    if secondary_keywords:
+        score += (secondary_found / len(secondary_keywords)) * 30.0
+
+    # Keyword density check (20 points) - avoid stuffing
+    primary_count = text_lower.count(primary_keyword.lower())
+    words_total = len(text_lower.split())
+    if words_total > 0:
+        density = primary_count / words_total
+        if 0.01 <= density <= 0.03:  # Ideal density 1-3%
+            score += 20.0
+        elif 0.03 < density <= 0.05:
+            score += 10.0  # Slightly high
+        elif density > 0.05:
+            score -= 10.0  # Keyword stuffing penalty
+
+    return min(score, 100.0)
+
+def calculate_competitive_analysis_score(content_type: str) -> float:
+    """Calculate competitive analysis score (simplified for now)"""
+    # This would ideally compare against top-ranked content
+    # For now, provide a baseline score
+    base_scores = {
+        "hub": 75.0,  # Hub content typically more competitive
+        "spoke": 65.0,  # Spoke content more niche
+    }
+    return base_scores.get(content_type, 70.0)
+
+def calculate_confidence_scores(
+    title: str,
+    meta_description: Optional[str],
+    word_count: Optional[int],
+    primary_keyword: str,
+    secondary_keywords: List[str],
+    content_type: str,
+    blacklisted_words: List[str] = []
+) -> ConfidenceScores:
+    """Calculate all confidence scores for content"""
+    quality = calculate_quality_score(title, meta_description, word_count)
+    brand_safety = calculate_brand_safety_score(title, meta_description, blacklisted_words)
+    keyword_relevance = calculate_keyword_relevance_score(title, meta_description, primary_keyword, secondary_keywords)
+    competitive = calculate_competitive_analysis_score(content_type)
+
+    # Weighted average: quality 30%, brand safety 40%, keyword 20%, competitive 10%
+    overall = (quality * 0.3) + (brand_safety * 0.4) + (keyword_relevance * 0.2) + (competitive * 0.1)
+
+    return ConfidenceScores(
+        quality_score=quality,
+        brand_safety_score=brand_safety,
+        keyword_relevance_score=keyword_relevance,
+        competitive_analysis_score=competitive,
+        overall_confidence=overall
+    )
+
+def should_auto_approve(
+    scores: ConfidenceScores,
+    risk_tolerance: RiskTolerance,
+    content_type: str
+) -> bool:
+    """Determine if content should be auto-approved"""
+    # Check if content type requires manual review
+    if content_type in risk_tolerance.manual_review_categories:
+        return False
+
+    # Check confidence threshold
+    if scores.overall_confidence < risk_tolerance.auto_approve_threshold:
+        return False
+
+    # Additional safety check: brand safety must be high
+    if scores.brand_safety_score < 80.0:
+        return False
+
+    return True
+
 @app.post("/api/content", response_model=ContentResponse, dependencies=[Depends(verify_api_key_header), Depends(rate_limit_expensive)])
 async def create_content(content: ContentPiece):
     """Create new content piece and track in BigQuery"""
@@ -261,15 +449,60 @@ async def create_content(content: ContentPiece):
                 logger.error("bigquery_insert_failed", errors=errors, content_id=content_id)
                 raise HTTPException(status_code=500, detail=f"Failed to insert content: {errors}")
 
+            # Phase 4: Calculate confidence scores
+            scores = calculate_confidence_scores(
+                title=content.title,
+                meta_description=content.meta_description,
+                word_count=content.word_count,
+                primary_keyword=content.keyword_primary,
+                secondary_keywords=content.keyword_secondary,
+                content_type=content.content_type,
+                blacklisted_words=[]  # TODO: Get from app settings
+            )
+
+            # Phase 4: Create approval record in Firestore
+            approval_id = f"approval_{uuid.uuid4().hex[:12]}"
+            approval_data = {
+                "approval_id": approval_id,
+                "content_id": content_id,
+                "tenant_id": content.tenant_id,
+                "app_id": None,  # TODO: Add app_id to ContentPiece model
+                "status": "pending",
+                "confidence_scores": scores.dict(),
+                "auto_approved": False,
+                "created_at": created_at.isoformat(),
+                "updated_at": created_at.isoformat(),
+            }
+
+            # Phase 4: Check for auto-approval
+            # For now, use default moderate risk tolerance
+            default_risk = RiskTolerance(
+                risk_level="moderate",
+                auto_approve_threshold=80.0,
+                manual_review_categories=[],
+                blacklisted_words=[]
+            )
+
+            if should_auto_approve(scores, default_risk, content.content_type):
+                approval_data["status"] = "auto_approved"
+                approval_data["auto_approved"] = True
+                approval_data["approved_at"] = created_at.isoformat()
+                approval_data["approved_by"] = "system"
+
+            # Store approval in Firestore
+            firestore_client.collection('content_approvals').document(approval_id).set(approval_data)
+
             logger.info("content_created",
                        content_id=content_id,
                        tenant_id=content.tenant_id,
-                       keyword=content.keyword_primary)
+                       keyword=content.keyword_primary,
+                       confidence_score=scores.overall_confidence,
+                       auto_approved=approval_data["auto_approved"])
 
             return ContentResponse(
                 content_id=content_id,
                 status="draft",
-                message="Content piece created successfully",
+                message=f"Content piece created successfully. Confidence: {scores.overall_confidence:.1f}% ({'Auto-approved' if approval_data['auto_approved'] else 'Pending review'})",
                 created_at=created_at.isoformat()
             )
 
@@ -714,6 +947,284 @@ async def get_tenant_stats(
 
     except Exception as e:
         logger.error("stats_generation_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Phase 4: Content Approval Workflow APIs
+@app.get("/api/content/pending-approval", dependencies=[Depends(verify_api_key_header)])
+async def get_pending_approvals(
+    tenant_id: str = "demo",
+    limit: int = Field(default=50, ge=1, le=200, description="Maximum items to return")
+):
+    """Get list of content awaiting approval"""
+    try:
+        # Query Firestore for pending approvals
+        approvals_ref = firestore_client.collection('content_approvals')
+        query = approvals_ref.where('tenant_id', '==', tenant_id).where('status', '==', 'pending').limit(limit)
+
+        approvals = []
+        for doc in query.stream():
+            approval_data = doc.to_dict()
+            approvals.append(approval_data)
+
+        logger.info("pending_approvals_fetched", tenant_id=tenant_id, count=len(approvals))
+
+        return {
+            "tenant_id": tenant_id,
+            "pending_count": len(approvals),
+            "approvals": approvals
+        }
+
+    except Exception as e:
+        logger.error("pending_approvals_fetch_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/content/{content_id}/approve", dependencies=[Depends(verify_api_key_header)])
+async def approve_content(content_id: str, request: ApproveContentRequest):
+    """Approve content for publication"""
+    try:
+        # Find approval record
+        approvals_ref = firestore_client.collection('content_approvals')
+        query = approvals_ref.where('content_id', '==', content_id).limit(1)
+
+        approval_doc = None
+        for doc in query.stream():
+            approval_doc = doc
+            break
+
+        if not approval_doc:
+            raise HTTPException(status_code=404, detail="Approval record not found")
+
+        # Update approval record
+        now = datetime.now().isoformat()
+        approval_doc.reference.update({
+            'status': 'approved',
+            'approved_by': request.approved_by,
+            'approved_at': now,
+            'updated_at': now,
+            'notes': request.notes
+        })
+
+        logger.info("content_approved",
+                   content_id=content_id,
+                   approved_by=request.approved_by)
+
+        return {
+            "success": True,
+            "content_id": content_id,
+            "status": "approved",
+            "approved_by": request.approved_by,
+            "approved_at": now
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("content_approval_failed", error=str(e), content_id=content_id)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/content/{content_id}/reject", dependencies=[Depends(verify_api_key_header)])
+async def reject_content(content_id: str, request: RejectContentRequest):
+    """Reject content"""
+    try:
+        # Find approval record
+        approvals_ref = firestore_client.collection('content_approvals')
+        query = approvals_ref.where('content_id', '==', content_id).limit(1)
+
+        approval_doc = None
+        for doc in query.stream():
+            approval_doc = doc
+            break
+
+        if not approval_doc:
+            raise HTTPException(status_code=404, detail="Approval record not found")
+
+        # Update approval record
+        now = datetime.now().isoformat()
+        approval_doc.reference.update({
+            'status': 'rejected',
+            'rejected_by': request.rejected_by,
+            'rejected_at': now,
+            'rejection_reason': request.rejection_reason,
+            'updated_at': now
+        })
+
+        logger.info("content_rejected",
+                   content_id=content_id,
+                   rejected_by=request.rejected_by,
+                   reason=request.rejection_reason)
+
+        return {
+            "success": True,
+            "content_id": content_id,
+            "status": "rejected",
+            "rejected_by": request.rejected_by,
+            "rejection_reason": request.rejection_reason,
+            "request_regeneration": request.request_regeneration
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("content_rejection_failed", error=str(e), content_id=content_id)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/content/{content_id}/scores", dependencies=[Depends(verify_api_key_header)])
+async def get_content_scores(content_id: str):
+    """Get detailed confidence scores for content"""
+    try:
+        # Find approval record
+        approvals_ref = firestore_client.collection('content_approvals')
+        query = approvals_ref.where('content_id', '==', content_id).limit(1)
+
+        approval_doc = None
+        for doc in query.stream():
+            approval_doc = doc
+            break
+
+        if not approval_doc:
+            raise HTTPException(status_code=404, detail="Approval record not found")
+
+        approval_data = approval_doc.to_dict()
+
+        return {
+            "content_id": content_id,
+            "scores": approval_data.get('confidence_scores', {}),
+            "status": approval_data.get('status'),
+            "auto_approved": approval_data.get('auto_approved', False)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("scores_fetch_failed", error=str(e), content_id=content_id)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/content/bulk-approve", dependencies=[Depends(verify_api_key_header)])
+async def bulk_approve_content(request: BulkApprovalRequest):
+    """Bulk approve multiple content pieces"""
+    try:
+        now = datetime.now().isoformat()
+        successful = []
+        failed = []
+
+        for content_id in request.content_ids:
+            try:
+                # Find approval record
+                approvals_ref = firestore_client.collection('content_approvals')
+                query = approvals_ref.where('content_id', '==', content_id).limit(1)
+
+                approval_doc = None
+                for doc in query.stream():
+                    approval_doc = doc
+                    break
+
+                if not approval_doc:
+                    failed.append({"content_id": content_id, "reason": "Approval record not found"})
+                    continue
+
+                # Update approval record
+                approval_doc.reference.update({
+                    'status': 'approved',
+                    'approved_by': request.approved_by,
+                    'approved_at': now,
+                    'updated_at': now,
+                    'notes': request.notes
+                })
+
+                successful.append(content_id)
+
+            except Exception as e:
+                failed.append({"content_id": content_id, "reason": str(e)})
+
+        logger.info("bulk_approval_completed",
+                   approved_by=request.approved_by,
+                   successful_count=len(successful),
+                   failed_count=len(failed))
+
+        return {
+            "success": True,
+            "total_requested": len(request.content_ids),
+            "successful_count": len(successful),
+            "failed_count": len(failed),
+            "successful": successful,
+            "failed": failed,
+            "approved_by": request.approved_by,
+            "approved_at": now
+        }
+
+    except Exception as e:
+        logger.error("bulk_approval_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Phase 4: App Risk Settings APIs
+@app.get("/api/apps/{app_id}/risk-settings", dependencies=[Depends(verify_api_key_header)])
+async def get_risk_settings(app_id: str):
+    """Get risk tolerance settings for an app"""
+    try:
+        # Get from Firestore
+        app_doc = firestore_client.collection('aso_apps').document(app_id).get()
+
+        if not app_doc.exists:
+            # Return default settings
+            return {
+                "app_id": app_id,
+                "risk_level": "moderate",
+                "auto_approve_threshold": 80.0,
+                "manual_review_categories": [],
+                "blacklisted_words": []
+            }
+
+        app_data = app_doc.to_dict()
+        risk_settings = app_data.get('risk_settings', {})
+
+        return {
+            "app_id": app_id,
+            "risk_level": risk_settings.get('risk_level', 'moderate'),
+            "auto_approve_threshold": risk_settings.get('auto_approve_threshold', 80.0),
+            "manual_review_categories": risk_settings.get('manual_review_categories', []),
+            "blacklisted_words": risk_settings.get('blacklisted_words', [])
+        }
+
+    except Exception as e:
+        logger.error("risk_settings_fetch_failed", error=str(e), app_id=app_id)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/api/apps/{app_id}/risk-settings", dependencies=[Depends(verify_api_key_header)])
+async def update_risk_settings(app_id: str, settings: RiskTolerance):
+    """Update risk tolerance settings for an app"""
+    try:
+        # Validate risk level
+        if settings.risk_level not in ['conservative', 'moderate', 'aggressive']:
+            raise HTTPException(status_code=400, detail="Invalid risk_level. Must be: conservative, moderate, or aggressive")
+
+        # Update in Firestore
+        app_ref = firestore_client.collection('aso_apps').document(app_id)
+        app_ref.set({
+            'app_id': app_id,
+            'risk_settings': {
+                'risk_level': settings.risk_level,
+                'auto_approve_threshold': settings.auto_approve_threshold,
+                'manual_review_categories': settings.manual_review_categories,
+                'blacklisted_words': settings.blacklisted_words
+            },
+            'updated_at': datetime.now().isoformat()
+        }, merge=True)
+
+        logger.info("risk_settings_updated",
+                   app_id=app_id,
+                   risk_level=settings.risk_level,
+                   threshold=settings.auto_approve_threshold)
+
+        return {
+            "success": True,
+            "app_id": app_id,
+            "risk_settings": settings.dict()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("risk_settings_update_failed", error=str(e), app_id=app_id)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.on_event("shutdown")

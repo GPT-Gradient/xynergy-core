@@ -1,0 +1,17 @@
+# Cloud Build configuration for optimized audit-logging-service
+steps:
+  # Build the Docker image using the optimized Dockerfile
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/xynergy-services/audit-logging-service:optimized', '-f', 'Dockerfile.optimized', '.']
+
+  # Push the Docker image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/xynergy-services/audit-logging-service:optimized']
+
+# Build timeout
+timeout: 1200s
+
+# Options
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
