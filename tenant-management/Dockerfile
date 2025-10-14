@@ -14,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY main.py phase2_utils.py tenant_utils.py tenant_data_utils.py .
+COPY main.py phase2_utils.py tenant_utils.py tenant_data_utils.py ./
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash appuser \
