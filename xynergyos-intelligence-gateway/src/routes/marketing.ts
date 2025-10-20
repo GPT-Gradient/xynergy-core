@@ -19,7 +19,7 @@ router.post('/campaign', asyncHandler(async (req: AuthenticatedRequest, res: Res
     requestId: req.requestId,
   });
 
-  const result = await serviceRouter.callService('marketingEngine', '/generate-campaign', {
+  const result = await serviceRouter.callService('marketingEngine', '/campaigns/create', {
     method: 'POST',
     headers: {
       Authorization: req.headers.authorization!,

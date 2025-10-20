@@ -33,12 +33,16 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
 from auth import verify_api_key, verify_api_key_optional
 from redis_cache import redis_cache
 from rate_limiting import rate_limit_standard, rate_limit_expensive
+from http_client import get_http_client
 
 
 # Configuration
 PROJECT_ID = os.getenv("PROJECT_ID", "xynergy-dev-1757909467")
 REGION = os.getenv("REGION", "us-central1")
 PORT = int(os.getenv("PORT", 8080))
+
+# AI Routing Engine URL
+AI_ROUTING_URL = os.getenv("AI_ROUTING_URL", "https://xynergy-ai-routing-engine-835612502919.us-central1.run.app")
 
 # Initialize GCP clients
 publisher = get_publisher_client()  # Phase 4: Shared connection pooling
@@ -144,6 +148,14 @@ class KeywordResearchRequest(BaseModel):
     business_type: str = Field(..., max_length=200)
     target_market: str = Field(..., max_length=200)
     competitor_urls: Optional[List[str]] = Field(default=[], max_items=10)
+
+class ContentGenerationRequest(BaseModel):
+    content_type: str = Field(..., max_length=100)  # blog_post, social_media, email, ad_copy
+    topic: str = Field(..., max_length=500)
+    target_audience: Optional[str] = Field(default="", max_length=500)
+    tone: Optional[str] = Field(default="professional", max_length=100)
+    keywords: Optional[List[str]] = Field(default=[], max_items=20)
+    max_words: Optional[int] = Field(default=500, ge=50, le=2000)
 
 # Health check endpoint
 @app.on_event("startup")
@@ -589,7 +601,7 @@ async def get_performance_analytics():
     try:
         # Get recent campaigns
         campaigns = db.collection("marketing_campaigns").order_by("created_at", direction=firestore.Query.DESCENDING).limit(10).stream()
-        
+
         analytics_data = []
         for campaign in campaigns:
             data = campaign.to_dict()
@@ -600,7 +612,7 @@ async def get_performance_analytics():
                 "created_at": data["created_at"].isoformat() if data["created_at"] else None,
                 "estimated_reach": data["strategy"].get("estimated_reach", 0) if "strategy" in data else 0
             })
-        
+
         return {
             "total_campaigns": len(analytics_data),
             "recent_campaigns": analytics_data,
@@ -614,13 +626,177 @@ async def get_performance_analytics():
         logger.error(f"Error retrieving analytics: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve analytics: {str(e)}")
 
+# Generate marketing content (called by Intelligence Gateway)
+@app.post("/generate-content", dependencies=[Depends(verify_api_key), Depends(rate_limit_expensive)])
+async def generate_content(request: ContentGenerationRequest):
+    """Generate AI-powered marketing content and save to Firestore"""
+    try:
+        with performance_monitor.track_operation("content_generation"):
+            # Build AI prompt for content generation
+            keywords_str = ', '.join(request.keywords) if request.keywords else 'N/A'
+            prompt = f"""Generate {request.content_type} content on the following topic:
+
+Topic: {request.topic}
+Target Audience: {request.target_audience or 'General audience'}
+Tone: {request.tone}
+Keywords to include: {keywords_str}
+Target length: approximately {request.max_words} words
+
+Create engaging, professional content that is optimized for the target audience. Include a compelling headline and clear call-to-action if appropriate for the content type."""
+
+            # Call AI Routing Engine
+            client = await get_http_client()
+            response = await client.post(
+                f"{AI_ROUTING_URL}/api/generate",
+                json={
+                    "prompt": prompt,
+                    "max_tokens": min(request.max_words * 2, 1500),  # Roughly 2 tokens per word
+                    "temperature": 0.7
+                },
+                timeout=60.0
+            )
+
+            if response.status_code != 200:
+                raise HTTPException(status_code=500, detail="AI content generation failed")
+
+            ai_result = response.json()
+            generated_text = ai_result.get("text", "")
+
+            # Create content ID
+            content_id = f"content_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid_lib.uuid4().hex[:8]}"
+
+            # Store in Firestore (generated_content collection)
+            content_doc = {
+                "content_id": content_id,
+                "title": request.topic[:100],  # Use topic as title
+                "type": request.content_type,
+                "content": generated_text,
+                "metadata": {
+                    "keywords": request.keywords or [],
+                    "target_audience": request.target_audience or "general",
+                    "tone": request.tone,
+                    "word_count": len(generated_text.split()),
+                    "content_type": request.content_type
+                },
+                "status": "draft",
+                "created_at": datetime.utcnow(),
+                "ai_provider": ai_result.get("provider", "unknown"),
+                "ai_model": ai_result.get("model", "unknown")
+            }
+
+            db.collection("generated_content").document(content_id).set(content_doc)
+
+            # Publish event
+            event_data = {
+                "event_type": "content_generated",
+                "content_id": content_id,
+                "content_type": request.content_type,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+            topic_path = publisher.topic_path(PROJECT_ID, "xynergy-marketing-events")
+            publisher.publish(topic_path, json.dumps(event_data).encode())
+
+            logger.info("content_generated",
+                       content_id=content_id,
+                       content_type=request.content_type,
+                       provider=ai_result.get("provider"),
+                       word_count=len(generated_text.split()))
+
+            return {
+                "success": True,
+                "content_id": content_id,
+                "content": generated_text,
+                "metadata": content_doc["metadata"],
+                "status": "draft",
+                "ai_provider": ai_result.get("provider"),
+                "ai_model": ai_result.get("model")
+            }
+
+    except Exception as e:
+        logger.error("content_generation_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to generate content: {str(e)}")
+
 # Helper functions
 async def generate_campaign_strategy(request: CampaignRequest) -> Dict[str, Any]:
-    """Generate AI-powered campaign strategy"""
-    
-    # Simulate AI strategy generation
-    await asyncio.sleep(0.1)  # Simulate processing time
-    
+    """Generate AI-powered campaign strategy using AI Routing Engine"""
+
+    # Build AI prompt for campaign strategy
+    prompt = f"""Create a comprehensive marketing campaign strategy for the following business:
+
+Business Type: {request.business_type}
+Target Audience: {request.target_audience}
+Budget Range: {request.budget_range}
+Campaign Goals: {', '.join(request.campaign_goals)}
+Preferred Channels: {', '.join(request.preferred_channels) if request.preferred_channels else 'Not specified'}
+
+Please provide a detailed campaign strategy including:
+1. Campaign name and description
+2. Recommended marketing channels (prioritize from: social_media, search, email, content, display)
+3. Budget allocation across channels (percentages)
+4. Key messaging themes
+5. Success metrics to track
+
+Respond in a structured format that can be easily parsed."""
+
+    try:
+        # Call AI Routing Engine
+        client = await get_http_client()
+        response = await client.post(
+            f"{AI_ROUTING_URL}/api/generate",
+            json={
+                "prompt": prompt,
+                "max_tokens": 800,
+                "temperature": 0.7
+            },
+            timeout=30.0
+        )
+
+        if response.status_code == 200:
+            ai_result = response.json()
+            ai_text = ai_result.get("text", "")
+
+            # Parse AI response and structure it
+            # If AI response is structured, use it; otherwise create default structure
+            strategy = {
+                "name": f"{request.business_type.title()} Growth Campaign",
+                "description": f"AI-generated marketing campaign for {request.business_type} targeting {request.target_audience}",
+                "ai_generated_strategy": ai_text,
+                "channels": request.preferred_channels if request.preferred_channels else ["social_media", "search", "email"],
+                "estimated_reach": 10000 + len(request.campaign_goals) * 2000,
+                "budget_allocation": {
+                    "social_media": 0.4,
+                    "search": 0.35,
+                    "email": 0.15,
+                    "content": 0.1
+                },
+                "timeline": "30 days",
+                "key_messages": [
+                    f"Discover premium {request.business_type} solutions",
+                    f"Perfect for {request.target_audience}",
+                    "AI-optimized messaging strategy"
+                ],
+                "success_metrics": [
+                    "click_through_rate",
+                    "conversion_rate",
+                    "cost_per_acquisition",
+                    "return_on_ad_spend"
+                ],
+                "ai_provider": ai_result.get("provider", "unknown"),
+                "ai_model": ai_result.get("model", "unknown")
+            }
+
+            logger.info("AI campaign strategy generated successfully",
+                       provider=ai_result.get("provider"),
+                       model=ai_result.get("model"))
+
+            return strategy
+
+    except Exception as e:
+        logger.error("AI generation failed, using fallback strategy", error=str(e))
+        # Fallback to basic strategy if AI fails
+
+    # Fallback strategy
     strategy = {
         "name": f"{request.business_type.title()} Growth Campaign",
         "description": f"Targeted marketing campaign for {request.business_type} focusing on {request.target_audience}",
@@ -643,9 +819,10 @@ async def generate_campaign_strategy(request: CampaignRequest) -> Dict[str, Any]
             "conversion_rate",
             "cost_per_acquisition",
             "return_on_ad_spend"
-        ]
+        ],
+        "fallback": True
     }
-    
+
     return strategy
 
 async def generate_keyword_research(request: KeywordResearchRequest) -> Dict[str, Any]:
