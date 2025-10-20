@@ -74,5 +74,32 @@ export const websocketRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
+// Public route rate limit (5 requests per minute per IP)
+// Used for website form submissions to prevent abuse
+export const publicRouteRateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5,
+  message: {
+    error: 'Too Many Requests',
+    message: 'Too many submission attempts. Please try again in a minute.',
+  },
+  keyGenerator: (req: Request): string => {
+    // Use IP only for public routes (no user authentication)
+    return req.ip || req.socket.remoteAddress || 'unknown';
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    logger.warn('Public route rate limit exceeded', {
+      ip: req.ip,
+      path: req.path,
+    });
+    res.status(429).json({
+      error: 'Too Many Requests',
+      message: 'Too many submission attempts. Please try again in a minute.',
+    });
+  },
+});
+
 // Note: Redis client cleanup handled by cacheService.disconnect()
 // No separate cleanup needed since we're reusing the cache service client
