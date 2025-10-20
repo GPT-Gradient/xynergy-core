@@ -18,6 +18,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py .
 COPY phase2_utils.py .
 COPY http_client.py .
+COPY gcp_clients.py .
+COPY auth.py .
+COPY redis_cache.py .
+COPY rate_limiting.py .
 
 # Security: non-root user
 RUN useradd --create-home --shell /bin/bash appuser \
