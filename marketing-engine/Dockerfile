@@ -17,9 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
 COPY phase2_utils.py .
-
-# Try to copy shared modules if they exist (build context dependent)
-COPY shared/* /app/shared/ 2>/dev/null || true
+COPY http_client.py .
 
 # Security: non-root user
 RUN useradd --create-home --shell /bin/bash appuser \
