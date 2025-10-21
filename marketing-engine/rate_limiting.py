@@ -112,7 +112,7 @@ class RateLimiter:
         with self.lock:
             # Check minute limit
             minute_count = sum(
-                count for ts, count in self.minute_requests[identifier]
+                count for ts, count in self.minute_requests.get(identifier, [])
                 if ts > (now - 60)
             )
 
@@ -135,7 +135,7 @@ class RateLimiter:
 
             # Check hour limit
             hour_count = sum(
-                count for ts, count in self.hour_requests[identifier]
+                count for ts, count in self.hour_requests.get(identifier, [])
                 if ts > (now - 3600)
             )
 
@@ -157,6 +157,10 @@ class RateLimiter:
                 )
 
             # Record this request
+            if identifier not in self.minute_requests:
+                self.minute_requests[identifier] = []
+            if identifier not in self.hour_requests:
+                self.hour_requests[identifier] = []
             self.minute_requests[identifier].append((now, cost))
             self.hour_requests[identifier].append((now, cost))
 
